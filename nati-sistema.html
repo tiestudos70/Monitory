@@ -1,0 +1,1436 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>UNA NaTI · Sistema de Gestão de Ativos</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+  :root {
+    --red: #c8102e;
+    --red-dark: #a00d25;
+    --red-light: #ff2d4e;
+    --blue: #0066ff;
+    --blue-dark: #0052cc;
+    --bg: #0a0a0f;
+    --bg2: #111118;
+    --bg3: #1a1a24;
+    --bg4: #222230;
+    --border: rgba(255,255,255,0.07);
+    --border2: rgba(255,255,255,0.12);
+    --text: #f0f0f8;
+    --text2: #9090a8;
+    --text3: #6060758;
+    --green: #00e676;
+    --orange: #ff9800;
+    --yellow: #ffd600;
+    --radius: 12px;
+    --radius-sm: 8px;
+    --shadow: 0 4px 24px rgba(0,0,0,0.4);
+    --shadow-lg: 0 8px 48px rgba(0,0,0,0.6);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:var(--bg); color:var(--text); font-family:'Space Grotesk',sans-serif; min-height:100vh; overflow-x:hidden; }
+  
+  /* SCROLLBAR */
+  ::-webkit-scrollbar { width:6px; }
+  ::-webkit-scrollbar-track { background:var(--bg2); }
+  ::-webkit-scrollbar-thumb { background:var(--bg4); border-radius:3px; }
+
+  /* ============ LOGIN ============ */
+  #login-screen {
+    min-height:100vh; display:flex; align-items:center; justify-content:center;
+    background: radial-gradient(ellipse at 20% 50%, rgba(200,16,46,0.15) 0%, transparent 60%),
+                radial-gradient(ellipse at 80% 20%, rgba(0,102,255,0.1) 0%, transparent 60%),
+                var(--bg);
+  }
+  .login-box {
+    width:420px; background:var(--bg2); border:1px solid var(--border2); border-radius:20px;
+    padding:48px; box-shadow:var(--shadow-lg);
+    animation: fadeUp 0.5s ease;
+  }
+  @keyframes fadeUp { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:translateY(0); } }
+  .login-logo { text-align:center; margin-bottom:40px; }
+  .login-logo .brand { font-size:13px; color:var(--text2); letter-spacing:0.2em; text-transform:uppercase; margin-bottom:8px; }
+  .login-logo h1 { font-size:36px; font-weight:700; letter-spacing:-1px; }
+  .login-logo h1 span { color:var(--red); }
+  .login-logo p { color:var(--text2); font-size:14px; margin-top:8px; }
+  .form-group { margin-bottom:20px; }
+  .form-group label { display:block; font-size:12px; color:var(--text2); letter-spacing:0.1em; text-transform:uppercase; margin-bottom:8px; font-weight:500; }
+  .form-group input {
+    width:100%; background:var(--bg3); border:1px solid var(--border); border-radius:var(--radius-sm);
+    padding:14px 16px; color:var(--text); font-family:'Space Grotesk',sans-serif; font-size:15px;
+    outline:none; transition:border 0.2s;
+  }
+  .form-group input:focus { border-color:var(--red); }
+  .btn-primary {
+    width:100%; background:var(--red); border:none; border-radius:var(--radius-sm);
+    padding:14px; color:#fff; font-family:'Space Grotesk',sans-serif; font-size:15px; font-weight:600;
+    cursor:pointer; transition:all 0.2s; letter-spacing:0.02em;
+  }
+  .btn-primary:hover { background:var(--red-light); transform:translateY(-1px); box-shadow:0 4px 16px rgba(200,16,46,0.4); }
+  .btn-primary:disabled { opacity:0.5; cursor:not-allowed; transform:none; }
+  .login-error { background:rgba(200,16,46,0.15); border:1px solid rgba(200,16,46,0.3); border-radius:var(--radius-sm); padding:12px 16px; font-size:14px; color:#ff6b8a; margin-bottom:20px; display:none; }
+
+  /* ============ APP LAYOUT ============ */
+  #app { display:none; min-height:100vh; }
+  
+  /* SIDEBAR */
+  .sidebar {
+    position:fixed; left:0; top:0; bottom:0; width:240px;
+    background:var(--bg2); border-right:1px solid var(--border);
+    display:flex; flex-direction:column; z-index:100;
+    transition: transform 0.3s;
+  }
+  .sidebar-logo { padding:24px 24px 20px; border-bottom:1px solid var(--border); }
+  .sidebar-logo .brand { font-size:10px; color:var(--text2); letter-spacing:0.2em; text-transform:uppercase; }
+  .sidebar-logo h2 { font-size:24px; font-weight:700; letter-spacing:-0.5px; }
+  .sidebar-logo h2 span { color:var(--red); }
+  .sidebar-user { padding:16px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:12px; }
+  .user-avatar { width:36px; height:36px; border-radius:50%; background:var(--red); display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:700; flex-shrink:0; }
+  .user-info { flex:1; min-width:0; }
+  .user-name { font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .user-role { font-size:11px; color:var(--text2); text-transform:uppercase; letter-spacing:0.08em; }
+  .sidebar-nav { flex:1; padding:12px 0; overflow-y:auto; }
+  .nav-section { padding:8px 20px 4px; font-size:10px; color:var(--text2); letter-spacing:0.15em; text-transform:uppercase; font-weight:600; }
+  .nav-item {
+    display:flex; align-items:center; gap:12px; padding:10px 20px; cursor:pointer;
+    transition:all 0.15s; color:var(--text2); font-size:14px; font-weight:500;
+    border-left:3px solid transparent; margin:1px 0;
+  }
+  .nav-item:hover { background:rgba(255,255,255,0.04); color:var(--text); }
+  .nav-item.active { background:rgba(200,16,46,0.1); color:var(--red); border-left-color:var(--red); }
+  .nav-item .icon { font-size:18px; }
+  .sidebar-footer { padding:16px 20px; border-top:1px solid var(--border); }
+  .btn-logout { width:100%; background:transparent; border:1px solid var(--border); border-radius:var(--radius-sm); padding:10px; color:var(--text2); font-family:'Space Grotesk',sans-serif; font-size:13px; cursor:pointer; transition:all 0.2s; display:flex; align-items:center; gap:8px; justify-content:center; }
+  .btn-logout:hover { border-color:var(--red); color:var(--red); }
+
+  /* MAIN CONTENT */
+  .main { margin-left:240px; min-height:100vh; display:flex; flex-direction:column; }
+  .topbar { background:var(--bg2); border-bottom:1px solid var(--border); padding:16px 32px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:50; }
+  .topbar-title { font-size:20px; font-weight:700; letter-spacing:-0.3px; }
+  .topbar-actions { display:flex; gap:10px; align-items:center; }
+  .content { padding:32px; flex:1; }
+
+  /* CARDS */
+  .stat-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:16px; margin-bottom:32px; }
+  .stat-card { background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius); padding:20px 24px; transition:all 0.2s; }
+  .stat-card:hover { border-color:var(--border2); transform:translateY(-2px); }
+  .stat-card .label { font-size:12px; color:var(--text2); text-transform:uppercase; letter-spacing:0.1em; margin-bottom:8px; }
+  .stat-card .value { font-size:32px; font-weight:700; letter-spacing:-1px; font-family:'JetBrains Mono',monospace; }
+  .stat-card .sub { font-size:12px; color:var(--text2); margin-top:4px; }
+  .stat-card.red .value { color:var(--red); }
+  .stat-card.green .value { color:var(--green); }
+  .stat-card.blue .value { color:var(--blue); }
+  .stat-card.orange .value { color:var(--orange); }
+
+  /* TABLES */
+  .table-card { background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; margin-bottom:24px; }
+  .table-header { padding:20px 24px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--border); }
+  .table-title { font-size:15px; font-weight:600; }
+  .table-actions { display:flex; gap:8px; }
+  .table-wrap { overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  thead th { padding:10px 16px; text-align:left; color:var(--text2); font-size:11px; text-transform:uppercase; letter-spacing:0.1em; font-weight:600; background:var(--bg3); border-bottom:1px solid var(--border); white-space:nowrap; }
+  tbody tr { border-bottom:1px solid var(--border); transition:background 0.15s; }
+  tbody tr:last-child { border-bottom:none; }
+  tbody tr:hover { background:rgba(255,255,255,0.03); }
+  tbody td { padding:12px 16px; vertical-align:middle; }
+  .td-mono { font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--text2); }
+
+  /* BADGES */
+  .badge { display:inline-flex; align-items:center; gap:5px; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:600; letter-spacing:0.05em; }
+  .badge::before { content:''; width:6px; height:6px; border-radius:50%; background:currentColor; }
+  .badge-green { background:rgba(0,230,118,0.12); color:var(--green); }
+  .badge-red { background:rgba(200,16,46,0.15); color:#ff6b8a; }
+  .badge-orange { background:rgba(255,152,0,0.12); color:var(--orange); }
+  .badge-gray { background:rgba(255,255,255,0.07); color:var(--text2); }
+  .badge-blue { background:rgba(0,102,255,0.12); color:#6699ff; }
+
+  /* BUTTONS */
+  .btn { display:inline-flex; align-items:center; gap:6px; padding:8px 16px; border-radius:var(--radius-sm); font-family:'Space Grotesk',sans-serif; font-size:13px; font-weight:600; cursor:pointer; transition:all 0.2s; border:none; white-space:nowrap; }
+  .btn-sm { padding:6px 12px; font-size:12px; }
+  .btn-red { background:var(--red); color:#fff; }
+  .btn-red:hover { background:var(--red-light); }
+  .btn-ghost { background:transparent; color:var(--text2); border:1px solid var(--border); }
+  .btn-ghost:hover { border-color:var(--border2); color:var(--text); }
+  .btn-blue { background:var(--blue); color:#fff; }
+  .btn-blue:hover { background:var(--blue-dark); }
+  .btn-green { background:rgba(0,230,118,0.15); color:var(--green); border:1px solid rgba(0,230,118,0.2); }
+  .btn-green:hover { background:rgba(0,230,118,0.25); }
+
+  /* SEARCH */
+  .search-bar { position:relative; }
+  .search-bar input { background:var(--bg3); border:1px solid var(--border); border-radius:var(--radius-sm); padding:9px 12px 9px 36px; color:var(--text); font-family:'Space Grotesk',sans-serif; font-size:13px; outline:none; width:240px; transition:border 0.2s; }
+  .search-bar input:focus { border-color:var(--border2); }
+  .search-bar::before { content:'🔍'; position:absolute; left:10px; top:50%; transform:translateY(-50%); font-size:13px; pointer-events:none; }
+
+  /* MODAL */
+  .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:200; display:none; align-items:center; justify-content:center; backdrop-filter:blur(4px); padding:20px; }
+  .modal-overlay.open { display:flex; }
+  .modal { background:var(--bg2); border:1px solid var(--border2); border-radius:16px; width:100%; max-width:600px; max-height:90vh; overflow-y:auto; box-shadow:var(--shadow-lg); animation:fadeUp 0.25s ease; }
+  .modal-header { padding:24px 28px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; background:var(--bg2); z-index:1; }
+  .modal-title { font-size:18px; font-weight:700; }
+  .modal-close { background:none; border:none; color:var(--text2); font-size:22px; cursor:pointer; line-height:1; padding:4px; border-radius:6px; }
+  .modal-close:hover { color:var(--text); background:rgba(255,255,255,0.06); }
+  .modal-body { padding:24px 28px; }
+  .modal-footer { padding:16px 28px; border-top:1px solid var(--border); display:flex; justify-content:flex-end; gap:10px; }
+  .form-row { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .form-field { margin-bottom:16px; }
+  .form-field label { display:block; font-size:11px; color:var(--text2); text-transform:uppercase; letter-spacing:0.1em; margin-bottom:6px; font-weight:600; }
+  .form-field input, .form-field select, .form-field textarea {
+    width:100%; background:var(--bg3); border:1px solid var(--border); border-radius:var(--radius-sm);
+    padding:10px 14px; color:var(--text); font-family:'Space Grotesk',sans-serif; font-size:14px; outline:none; transition:border 0.2s;
+  }
+  .form-field input:focus, .form-field select:focus, .form-field textarea:focus { border-color:var(--red); }
+  .form-field select option { background:var(--bg3); }
+  .form-field textarea { resize:vertical; min-height:80px; }
+  .form-full { grid-column:1/-1; }
+
+  /* LOADING */
+  .loading { display:flex; align-items:center; justify-content:center; padding:60px; color:var(--text2); gap:12px; font-size:14px; }
+  .spinner { width:20px; height:20px; border:2px solid var(--border); border-top-color:var(--red); border-radius:50%; animation:spin 0.7s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .empty { text-align:center; padding:60px; color:var(--text2); font-size:14px; }
+  .empty .icon { font-size:48px; margin-bottom:12px; opacity:0.4; }
+
+  /* TOAST */
+  #toast-container { position:fixed; bottom:24px; right:24px; z-index:999; display:flex; flex-direction:column; gap:8px; pointer-events:none; }
+  .toast { background:var(--bg3); border:1px solid var(--border2); border-radius:var(--radius-sm); padding:14px 20px; font-size:13px; display:flex; align-items:center; gap:10px; box-shadow:var(--shadow); animation:slideIn 0.3s ease; max-width:320px; pointer-events:all; }
+  .toast.success { border-left:3px solid var(--green); }
+  .toast.error { border-left:3px solid var(--red); }
+  .toast.info { border-left:3px solid var(--blue); }
+  @keyframes slideIn { from { opacity:0; transform:translateX(20px); } to { opacity:1; transform:translateX(0); } }
+
+  /* REALTIME DOT */
+  .realtime-dot { width:8px; height:8px; border-radius:50%; background:var(--green); animation:pulse 2s infinite; display:inline-block; }
+  @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.3;} }
+
+  /* DETAIL PANEL */
+  .detail-panel { background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius); padding:24px; margin-bottom:24px; }
+  .detail-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:16px; margin-top:16px; }
+  .detail-item .di-label { font-size:11px; color:var(--text2); text-transform:uppercase; letter-spacing:0.1em; margin-bottom:4px; }
+  .detail-item .di-value { font-size:14px; font-weight:500; }
+
+  /* PREDIO TAG */
+  .predio-tag { display:inline-flex; align-items:center; gap:6px; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:700; letter-spacing:0.05em; }
+
+  /* SECTION HEADER */
+  .section-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; }
+  .section-title { font-size:22px; font-weight:700; letter-spacing:-0.5px; }
+  .section-sub { font-size:14px; color:var(--text2); margin-top:2px; }
+
+  /* TABS */
+  .tabs { display:flex; gap:4px; background:var(--bg3); border-radius:var(--radius-sm); padding:4px; margin-bottom:24px; width:fit-content; }
+  .tab { padding:8px 20px; border-radius:6px; font-size:13px; font-weight:500; cursor:pointer; transition:all 0.2s; color:var(--text2); }
+  .tab.active { background:var(--bg2); color:var(--text); box-shadow:var(--shadow); }
+
+  /* QR MODAL */
+  #qr-canvas { display:flex; justify-content:center; margin:20px 0; }
+  #qr-canvas > div { background:#fff; padding:16px; border-radius:8px; }
+
+  /* FILTER BAR */
+  .filter-bar { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:20px; }
+  .filter-bar select { background:var(--bg3); border:1px solid var(--border); border-radius:var(--radius-sm); padding:8px 12px; color:var(--text); font-family:'Space Grotesk',sans-serif; font-size:13px; outline:none; }
+  .filter-bar select:focus { border-color:var(--border2); }
+
+  /* BREADCRUMB */
+  .breadcrumb { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text2); margin-bottom:24px; }
+  .breadcrumb span { cursor:pointer; }
+  .breadcrumb span:hover { color:var(--text); }
+  .breadcrumb .sep { opacity:0.4; }
+  .breadcrumb .current { color:var(--text); font-weight:500; }
+
+  /* RESPONSIVO */
+  @media (max-width:768px) {
+    .sidebar { transform:translateX(-100%); }
+    .main { margin-left:0; }
+    .stat-grid { grid-template-columns:1fr 1fr; }
+    .form-row { grid-template-columns:1fr; }
+    .content { padding:16px; }
+  }
+
+  /* PROGRESS BAR */
+  .progress-bar { height:4px; background:var(--bg4); border-radius:2px; overflow:hidden; margin-top:6px; }
+  .progress-fill { height:100%; border-radius:2px; transition:width 0.5s; }
+  .pf-green { background:var(--green); }
+  .pf-orange { background:var(--orange); }
+  .pf-red { background:var(--red); }
+
+  /* ACTIONS CELL */
+  .actions-cell { display:flex; gap:6px; }
+
+  /* EMPTY STATE */
+  .empty-state { text-align:center; padding:80px 40px; color:var(--text2); }
+  .empty-state .es-icon { font-size:64px; opacity:0.2; margin-bottom:20px; }
+  .empty-state h3 { font-size:18px; font-weight:600; color:var(--text); margin-bottom:8px; }
+  .empty-state p { font-size:14px; }
+
+  /* HIGHLIGHT on realtime update */
+  .row-updated { animation:highlightRow 1.5s ease; }
+  @keyframes highlightRow { 0%{background:rgba(0,230,118,0.1);} 100%{background:transparent;} }
+</style>
+</head>
+<body>
+
+<!-- ============ LOGIN ============ -->
+<div id="login-screen">
+  <div class="login-box">
+    <div class="login-logo">
+      <div class="brand">Una · Sistema de Gestão</div>
+      <h1>Na<span>TI</span></h1>
+      <p>Gestão de Ativos de TI</p>
+    </div>
+    <div id="login-error" class="login-error"></div>
+    <div class="form-group">
+      <label>E-mail institucional</label>
+      <input type="email" id="login-email" placeholder="seu@email.com" autocomplete="email"/>
+    </div>
+    <div class="form-group">
+      <label>Senha</label>
+      <input type="password" id="login-password" placeholder="••••••••" autocomplete="current-password"/>
+    </div>
+    <button class="btn-primary" id="login-btn" onclick="doLogin()">Entrar →</button>
+  </div>
+</div>
+
+<!-- ============ APP ============ -->
+<div id="app">
+  <!-- SIDEBAR -->
+  <nav class="sidebar">
+    <div class="sidebar-logo">
+      <div class="brand">Una · NaTI</div>
+      <h2>Na<span>TI</span></h2>
+    </div>
+    <div class="sidebar-user">
+      <div class="user-avatar" id="user-avatar">U</div>
+      <div class="user-info">
+        <div class="user-name" id="user-name">Usuário</div>
+        <div class="user-role" id="user-role">cargo</div>
+      </div>
+    </div>
+    <div class="sidebar-nav">
+      <div class="nav-section">Principal</div>
+      <div class="nav-item active" onclick="showPage('dashboard')"><span class="icon">📊</span> Dashboard</div>
+      <div class="nav-item" onclick="showPage('predios')"><span class="icon">🏢</span> Prédios</div>
+      <div class="nav-item" onclick="showPage('laboratorios')"><span class="icon">🔬</span> Laboratórios</div>
+      <div class="nav-section">Ativos</div>
+      <div class="nav-item" onclick="showPage('equipamentos')"><span class="icon">💻</span> Equipamentos</div>
+      <div class="nav-item" onclick="showPage('manutencoes')"><span class="icon">🔧</span> Manutenções</div>
+      <div class="nav-item" onclick="showPage('softwares')"><span class="icon">📦</span> Softwares</div>
+      <div class="nav-section">Sistema</div>
+      <div class="nav-item" onclick="showPage('usuarios')"><span class="icon">👥</span> Usuários</div>
+      <div class="nav-item" onclick="showPage('relatorios')"><span class="icon">📋</span> Relatórios</div>
+    </div>
+    <div class="sidebar-footer">
+      <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text2);margin-bottom:10px;">
+        <span class="realtime-dot"></span> Realtime ativo
+      </div>
+      <button class="btn-logout" onclick="doLogout()">⏻ Sair</button>
+    </div>
+  </nav>
+
+  <!-- MAIN -->
+  <main class="main">
+    <div class="topbar">
+      <div class="topbar-title" id="page-title">Dashboard</div>
+      <div class="topbar-actions" id="topbar-actions"></div>
+    </div>
+    <div class="content" id="page-content">
+      <div class="loading"><div class="spinner"></div> Carregando...</div>
+    </div>
+  </main>
+</div>
+
+<!-- MODALS -->
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal" id="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-title">Modal</div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+    <div class="modal-footer" id="modal-footer"></div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast-container"></div>
+
+<script>
+// ============================================================
+// SUPABASE INIT
+// ============================================================
+const SUPABASE_URL  = 'https://wdpiqbwcpluuxfhaztuw.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndkcGlxYndjcGx1dXhmaGF6dHV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2MjU2MjIsImV4cCI6MjA4ODIwMTYyMn0._LufLtpX01FxQojrvMBHUk61VCLdbABkgGejFAEm0_A';
+const { createClient } = supabase;
+const db = createClient(SUPABASE_URL, SUPABASE_ANON);
+
+// ============================================================
+// STATE
+// ============================================================
+let currentUser = null;
+let currentRole = null;
+let currentPage = 'dashboard';
+let realtimeChannels = [];
+
+// ============================================================
+// AUTH
+// ============================================================
+async function doLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const pass  = document.getElementById('login-password').value;
+  const btn   = document.getElementById('login-btn');
+  const err   = document.getElementById('login-error');
+  err.style.display = 'none';
+  if (!email || !pass) { showError('Preencha todos os campos.'); return; }
+  btn.disabled = true; btn.textContent = 'Entrando...';
+  const { data, error } = await db.auth.signInWithPassword({ email, password: pass });
+  if (error) {
+    err.style.display = 'block';
+    err.textContent = error.message === 'Invalid login credentials' ? 'E-mail ou senha incorretos.' : error.message;
+    btn.disabled = false; btn.textContent = 'Entrar →';
+    return;
+  }
+  currentUser = data.user;
+  await initApp();
+}
+
+function showError(msg) {
+  const err = document.getElementById('login-error');
+  err.style.display = 'block'; err.textContent = msg;
+}
+
+async function doLogout() {
+  realtimeChannels.forEach(ch => db.removeChannel(ch));
+  realtimeChannels = [];
+  await db.auth.signOut();
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('login-screen').style.display = 'flex';
+  currentUser = null; currentRole = null;
+}
+
+// Enter key login
+document.getElementById('login-password').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+document.getElementById('login-email').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+
+// ============================================================
+// INIT
+// ============================================================
+async function initApp() {
+  const { data: perfil } = await db.from('perfis').select('*').eq('id', currentUser.id).single();
+  currentRole = perfil?.role || 'visualizador';
+  document.getElementById('user-name').textContent = perfil?.nome || currentUser.email;
+  document.getElementById('user-role').textContent = currentRole;
+  document.getElementById('user-avatar').textContent = (perfil?.nome || currentUser.email)[0].toUpperCase();
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  setupRealtime();
+  showPage('dashboard');
+}
+
+// Check session on load
+(async () => {
+  const { data: { session } } = await db.auth.getSession();
+  if (session) {
+    currentUser = session.user;
+    await initApp();
+  }
+})();
+
+// ============================================================
+// REALTIME
+// ============================================================
+function setupRealtime() {
+  const ch = db.channel('global-changes')
+    .on('postgres_changes', { event: '*', schema: 'public' }, payload => {
+      toast(`Atualização em tempo real: ${payload.table}`, 'info');
+      if (currentPage === 'dashboard') showPage('dashboard');
+      if (currentPage === 'equipamentos') refreshEquipamentos();
+      if (currentPage === 'manutencoes') refreshManutencoes();
+    })
+    .subscribe();
+  realtimeChannels.push(ch);
+}
+
+// ============================================================
+// NAVIGATION
+// ============================================================
+function showPage(page) {
+  currentPage = page;
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(el => {
+    if (el.getAttribute('onclick')?.includes(`'${page}'`)) el.classList.add('active');
+  });
+  const titles = { dashboard:'Dashboard', predios:'Prédios', laboratorios:'Laboratórios', equipamentos:'Equipamentos', manutencoes:'Manutenções', softwares:'Softwares', usuarios:'Usuários', relatorios:'Relatórios' };
+  document.getElementById('page-title').textContent = titles[page] || page;
+  document.getElementById('topbar-actions').innerHTML = '';
+  const pages = { dashboard:renderDashboard, predios:renderPredios, laboratorios:renderLaboratorios, equipamentos:renderEquipamentos, manutencoes:renderManutencoes, softwares:renderSoftwares, usuarios:renderUsuarios, relatorios:renderRelatorios };
+  if (pages[page]) pages[page]();
+}
+
+// ============================================================
+// HELPERS
+// ============================================================
+function setContent(html) { document.getElementById('page-content').innerHTML = html; }
+function setLoading() { setContent('<div class="loading"><div class="spinner"></div> Carregando...</div>'); }
+
+function toast(msg, type='success') {
+  const c = document.getElementById('toast-container');
+  const icons = { success:'✅', error:'❌', info:'ℹ️' };
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.innerHTML = `${icons[type]} ${msg}`;
+  c.appendChild(el);
+  setTimeout(() => el.remove(), 3000);
+}
+
+function openModal(title, body, footer='') {
+  document.getElementById('modal-title').textContent = title;
+  document.getElementById('modal-body').innerHTML = body;
+  document.getElementById('modal-footer').innerHTML = footer;
+  document.getElementById('modal-overlay').classList.add('open');
+}
+function closeModal() { document.getElementById('modal-overlay').classList.remove('open'); }
+document.getElementById('modal-overlay').addEventListener('click', e => { if (e.target === document.getElementById('modal-overlay')) closeModal(); });
+
+function canEdit() { return currentRole === 'admin' || currentRole === 'tecnico'; }
+function isAdmin() { return currentRole === 'admin'; }
+
+function statusBadge(s) {
+  const map = { operacional:'badge-green', manutencao:'badge-orange', inativo:'badge-gray', extraviado:'badge-red' };
+  const lbl = { operacional:'Operacional', manutencao:'Manutenção', inativo:'Inativo', extraviado:'Extraviado' };
+  return `<span class="badge ${map[s]||'badge-gray'}">${lbl[s]||s}</span>`;
+}
+function manutBadge(s) {
+  const map = { aberto:'badge-red', em_andamento:'badge-orange', resolvido:'badge-green' };
+  const lbl = { aberto:'Aberto', em_andamento:'Em Andamento', resolvido:'Resolvido' };
+  return `<span class="badge ${map[s]||'badge-gray'}">${lbl[s]||s}</span>`;
+}
+function prioridadeBadge(p) {
+  const map = { baixa:'badge-gray', media:'badge-blue', alta:'badge-orange', critica:'badge-red' };
+  const lbl = { baixa:'Baixa', media:'Média', alta:'Alta', critica:'Crítica' };
+  return `<span class="badge ${map[p]||'badge-gray'}">${lbl[p]||p}</span>`;
+}
+function predioBadge(nome, cor) {
+  return `<span class="predio-tag" style="background:${cor}22;color:${cor};border:1px solid ${cor}44">${nome}</span>`;
+}
+
+function exportCSV(data, filename) {
+  if (!data.length) { toast('Sem dados para exportar', 'error'); return; }
+  const keys = Object.keys(data[0]);
+  const csv = [keys.join(','), ...data.map(r => keys.map(k => `"${r[k]??''}"`).join(','))].join('\n');
+  const a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+  a.download = filename;
+  a.click();
+  toast('CSV exportado!', 'success');
+}
+
+function showQR(id, label) {
+  openModal(`QR Code · ${label}`, `
+    <p style="color:var(--text2);font-size:13px;margin-bottom:8px;">Patrimônio / ID do ativo:</p>
+    <code style="font-family:'JetBrains Mono';font-size:12px;color:var(--red)">${id}</code>
+    <div id="qr-canvas"></div>
+    <p style="font-size:11px;color:var(--text2);text-align:center">Escaneie para acessar este ativo</p>
+  `, `<button class="btn btn-ghost" onclick="closeModal()">Fechar</button>`);
+  setTimeout(() => {
+    new QRCode(document.getElementById('qr-canvas'), {
+      text: `${location.href}?asset=${id}`,
+      width:180, height:180, colorDark:'#000', colorLight:'#fff'
+    });
+  }, 100);
+}
+
+// ============================================================
+// DASHBOARD
+// ============================================================
+async function renderDashboard() {
+  setLoading();
+  const [{ data: predios }, { data: labs }, { data: equip }, { data: manut }] = await Promise.all([
+    db.from('predios').select('*'),
+    db.from('laboratorios').select('*'),
+    db.from('equipamentos').select('*'),
+    db.from('manutencoes').select('*').neq('status','resolvido')
+  ]);
+
+  const total_equip = equip?.length || 0;
+  const op = equip?.filter(e => e.status==='operacional').length || 0;
+  const em_manut = equip?.filter(e => e.status==='manutencao').length || 0;
+  const inativos = equip?.filter(e => e.status==='inativo').length || 0;
+  const labs_ativos = labs?.filter(l => l.ativo).length || 0;
+  const pendentes = manut?.length || 0;
+  const pct = total_equip ? Math.round(op/total_equip*100) : 0;
+  const pctCls = pct>80?'pf-green':pct>50?'pf-orange':'pf-red';
+
+  const predioCards = (predios||[]).map(p => {
+    const pl = labs?.filter(l=>l.predio_id===p.id).length||0;
+    const pe = equip?.filter(e=>labs?.filter(l=>l.predio_id===p.id).map(l=>l.id).includes(e.laboratorio_id)).length||0;
+    return `<div class="stat-card"><div class="label">${p.nome}</div><div class="value" style="color:${p.cor}">${pl}</div><div class="sub">${pl} labs · ${pe} equip.</div></div>`;
+  }).join('');
+
+  const recentManut = (manut||[]).slice(0,5).map(m => `
+    <tr><td>${m.titulo}</td><td>${manutBadge(m.status)}</td><td>${prioridadeBadge(m.prioridade)}</td><td class="td-mono">${new Date(m.aberto_em).toLocaleDateString('pt-BR')}</td></tr>
+  `).join('');
+
+  setContent(`
+    <div class="stat-grid">
+      <div class="stat-card blue"><div class="label">Total Equipamentos</div><div class="value">${total_equip}</div><div class="sub">em ${labs_ativos} labs ativos</div></div>
+      <div class="stat-card green"><div class="label">Operacionais</div><div class="value">${op}</div><div class="progress-bar"><div class="progress-fill ${pctCls}" style="width:${pct}%"></div></div><div class="sub">${pct}% do total</div></div>
+      <div class="stat-card orange"><div class="label">Em Manutenção</div><div class="value">${em_manut}</div></div>
+      <div class="stat-card red"><div class="label">Chamados Abertos</div><div class="value">${pendentes}</div></div>
+      <div class="stat-card"><div class="label">Inativos</div><div class="value">${inativos}</div></div>
+      ${predioCards}
+    </div>
+    ${recentManut ? `
+    <div class="table-card">
+      <div class="table-header"><span class="table-title">⚠️ Manutenções Pendentes</span><button class="btn btn-ghost btn-sm" onclick="showPage('manutencoes')">Ver todas →</button></div>
+      <div class="table-wrap"><table><thead><tr><th>Título</th><th>Status</th><th>Prioridade</th><th>Aberto Em</th></tr></thead><tbody>${recentManut}</tbody></table></div>
+    </div>` : ''}
+  `);
+}
+
+// ============================================================
+// PRÉDIOS
+// ============================================================
+async function renderPredios() {
+  setLoading();
+  const { data: predios } = await db.from('vw_predio_resumo').select('*');
+  
+  if (isAdmin()) {
+    document.getElementById('topbar-actions').innerHTML = `<button class="btn btn-red" onclick="modalNovoPredio()">＋ Novo Prédio</button>`;
+  }
+
+  const rows = (predios||[]).map(p => `
+    <tr>
+      <td>${predioBadge(p.nome, p.cor)}</td>
+      <td class="td-mono">${p.total_labs}</td>
+      <td class="td-mono">${p.total_equipamentos}</td>
+      <td>${p.operacionais ? `<span class="badge badge-green">${p.operacionais} op.</span>` : '—'}</td>
+      <td>${p.em_manutencao ? `<span class="badge badge-orange">${p.em_manutencao}</span>` : '—'}</td>
+      ${isAdmin()?`<td class="actions-cell"><button class="btn btn-ghost btn-sm" onclick="modalEditPredio('${p.id}','${p.nome}','${p.cor}')">✏️ Editar</button></td>`:'<td></td>'}
+    </tr>
+  `).join('');
+
+  setContent(`
+    <div class="section-header"><div><div class="section-title">Prédios</div><div class="section-sub">Visão geral por prédio</div></div></div>
+    <div class="table-card">
+      <div class="table-wrap"><table>
+        <thead><tr><th>Prédio</th><th>Labs</th><th>Equipamentos</th><th>Operacionais</th><th>Manutenção</th><th></th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="6"><div class="empty">Nenhum prédio cadastrado.</div></td></tr>'}</tbody>
+      </table></div>
+    </div>
+  `);
+}
+
+function modalNovoPredio() {
+  openModal('Novo Prédio', `
+    <div class="form-field"><label>Nome</label><input id="pf-nome" placeholder="Ex: Liberdade"/></div>
+    <div class="form-field"><label>Endereço</label><input id="pf-end" placeholder="Rua..."/></div>
+    <div class="form-field"><label>Cor</label><input type="color" id="pf-cor" value="#c8102e" style="height:40px"/></div>
+  `, `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-red" onclick="savePredio()">Salvar</button>`);
+}
+
+async function savePredio() {
+  const nome = document.getElementById('pf-nome').value.trim();
+  const endereco = document.getElementById('pf-end').value.trim();
+  const cor = document.getElementById('pf-cor').value;
+  if (!nome) { toast('Nome obrigatório', 'error'); return; }
+  const { error } = await db.from('predios').insert({ nome, endereco, cor });
+  if (error) { toast(error.message, 'error'); return; }
+  toast('Prédio criado!'); closeModal(); renderPredios();
+}
+
+function modalEditPredio(id, nome, cor) {
+  openModal('Editar Prédio', `
+    <div class="form-field"><label>Nome</label><input id="ep-nome" value="${nome}"/></div>
+    <div class="form-field"><label>Cor</label><input type="color" id="ep-cor" value="${cor}" style="height:40px"/></div>
+  `, `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-red" onclick="updatePredio('${id}')">Salvar</button>`);
+}
+
+async function updatePredio(id) {
+  const nome = document.getElementById('ep-nome').value.trim();
+  const cor = document.getElementById('ep-cor').value;
+  const { error } = await db.from('predios').update({ nome, cor }).eq('id', id);
+  if (error) { toast(error.message, 'error'); return; }
+  toast('Prédio atualizado!'); closeModal(); renderPredios();
+}
+
+// ============================================================
+// LABORATÓRIOS
+// ============================================================
+async function renderLaboratorios(predioFilter=null) {
+  setLoading();
+  const [{ data: labs }, { data: predios }] = await Promise.all([
+    db.from('vw_lab_resumo').select('*'),
+    db.from('predios').select('*')
+  ]);
+
+  if (canEdit()) {
+    document.getElementById('topbar-actions').innerHTML = `<button class="btn btn-red" onclick="modalNovoLab()">＋ Novo Lab</button>`;
+  }
+
+  const filterOptions = (predios||[]).map(p => `<option value="${p.id}">${p.nome}</option>`).join('');
+  const allLabs = predioFilter ? (labs||[]).filter(l => l.predio_id === predioFilter) : (labs||[]);
+
+  const rows = allLabs.map(l => {
+    const pct = l.total_maquinas ? Math.round(l.maquinas_ok/l.total_maquinas*100) : 0;
+    const pctCls = pct>80?'pf-green':pct>50?'pf-orange':'pf-red';
+    return `
+      <tr>
+        <td><strong>${l.numero}</strong></td>
+        <td>${l.nome}</td>
+        <td>${predioBadge(l.predio, l.predio_cor)}</td>
+        <td class="td-mono">${l.andar}º</td>
+        <td><span class="badge badge-blue">${l.tipo||'—'}</span></td>
+        <td class="td-mono">${l.total_maquinas||0}</td>
+        <td>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:12px">${pct}%</span>
+            <div class="progress-bar" style="width:80px"><div class="progress-fill ${pctCls}" style="width:${pct}%"></div></div>
+          </div>
+        </td>
+        <td>${l.em_manutencao>0?`<span class="badge badge-orange">${l.em_manutencao}</span>`:'—'}</td>
+        <td class="actions-cell">
+          <button class="btn btn-ghost btn-sm" onclick="verLab('${l.id}')">Ver</button>
+          ${canEdit()?`<button class="btn btn-ghost btn-sm" onclick="modalEditLab('${l.id}')">✏️</button>`:''}
+        </td>
+      </tr>`;
+  }).join('');
+
+  setContent(`
+    <div class="section-header"><div><div class="section-title">Laboratórios</div><div class="section-sub">${allLabs.length} ambientes cadastrados</div></div></div>
+    <div class="filter-bar">
+      <select onchange="renderLaboratorios(this.value||null)"><option value="">Todos os prédios</option>${filterOptions}</select>
+    </div>
+    <div class="table-card">
+      <div class="table-wrap"><table>
+        <thead><tr><th>Nº</th><th>Nome</th><th>Prédio</th><th>Andar</th><th>Tipo</th><th>Máquinas</th><th>Disponibilidade</th><th>Manutenção</th><th></th></tr></thead>
+        <tbody>${rows||'<tr><td colspan="9"><div class="empty">Nenhum laboratório.</div></td></tr>'}</tbody>
+      </table></div>
+    </div>
+  `);
+}
+
+async function verLab(id) {
+  const { data: lab } = await db.from('vw_lab_resumo').select('*').eq('id', id).single();
+  const { data: equips } = await db.from('equipamentos').select('*').eq('laboratorio_id', id);
+  const { data: sws } = await db.from('softwares').select('*').eq('laboratorio_id', id);
+
+  const eRows = (equips||[]).map(e => `
+    <tr>
+      <td>${e.tipo}</td>
+      <td>${e.marca||'—'} ${e.modelo||''}</td>
+      <td class="td-mono">${e.patrimonio||'—'}</td>
+      <td>${statusBadge(e.status)}</td>
+      <td class="actions-cell">
+        <button class="btn btn-ghost btn-sm" onclick="showQR('${e.id}','${e.patrimonio||e.id}')">QR</button>
+      </td>
+    </tr>`).join('');
+
+  const swRows = (sws||[]).map(s => `<tr><td>${s.nome}</td><td>${s.versao||'—'}</td><td><span class="badge badge-blue">${s.licenca||'—'}</span></td></tr>`).join('');
+
+  openModal(`Laboratório ${lab?.numero} · ${lab?.nome}`, `
+    <div class="detail-grid" style="margin-bottom:20px">
+      <div class="detail-item"><div class="di-label">Prédio</div><div class="di-value">${predioBadge(lab?.predio||'—', lab?.predio_cor||'#666')}</div></div>
+      <div class="detail-item"><div class="di-label">Andar</div><div class="di-value">${lab?.andar}º</div></div>
+      <div class="detail-item"><div class="di-label">Capacidade</div><div class="di-value">${lab?.capacidade} pessoas</div></div>
+      <div class="detail-item"><div class="di-label">Total Equip.</div><div class="di-value">${lab?.total_equipamentos}</div></div>
+      <div class="detail-item"><div class="di-label">Responsável</div><div class="di-value">${lab?.responsavel||'—'}</div></div>
+    </div>
+    ${eRows?`<h4 style="margin-bottom:10px;font-size:13px;color:var(--text2)">EQUIPAMENTOS</h4>
+    <div class="table-wrap"><table><thead><tr><th>Tipo</th><th>Marca/Modelo</th><th>Patrimônio</th><th>Status</th><th></th></tr></thead><tbody>${eRows}</tbody></table></div>`:'' }
+    ${swRows?`<h4 style="margin:16px 0 10px;font-size:13px;color:var(--text2)">SOFTWARES</h4>
+    <div class="table-wrap"><table><thead><tr><th>Nome</th><th>Versão</th><th>Licença</th></tr></thead><tbody>${swRows}</tbody></table></div>`:''}
+  `, `<button class="btn btn-ghost" onclick="closeModal()">Fechar</button>`);
+}
+
+async function modalNovoLab() {
+  const { data: predios } = await db.from('predios').select('*');
+  const opts = (predios||[]).map(p => `<option value="${p.id}">${p.nome}</option>`).join('');
+  openModal('Novo Laboratório', `
+    <div class="form-row">
+      <div class="form-field"><label>Número</label><input id="nl-num" placeholder="Ex: L101"/></div>
+      <div class="form-field"><label>Nome</label><input id="nl-nome" placeholder="Ex: Lab de Informática"/></div>
+    </div>
+    <div class="form-row">
+      <div class="form-field"><label>Prédio</label><select id="nl-predio"><option value="">Selecione</option>${opts}</select></div>
+      <div class="form-field"><label>Andar</label><input type="number" id="nl-andar" value="1"/></div>
+    </div>
+    <div class="form-row">
+      <div class="form-field"><label>Tipo</label><select id="nl-tipo"><option value="ti">TI</option><option value="design">Design</option><option value="engenharia">Engenharia</option><option value="arquitetura">Arquitetura</option><option value="multiuso">Multiuso</option><option value="auditorio">Auditório</option><option value="sala_aula">Sala de Aula</option></select></div>
+      <div class="form-field"><label>Capacidade</label><input type="number" id="nl-cap" value="0"/></div>
+    </div>
+    <div class="form-field form-full"><label>Descrição</label><textarea id="nl-desc"></textarea></div>
+  `, `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-red" onclick="saveLab()">Salvar</button>`);
+}
+
+async function saveLab() {
+  const numero = document.getElementById('nl-num').value.trim();
+  const nome = document.getElementById('nl-nome').value.trim();
+  const predio_id = document.getElementById('nl-predio').value;
+  const andar = parseInt(document.getElementById('nl-andar').value)||1;
+  const tipo = document.getElementById('nl-tipo').value;
+  const capacidade = parseInt(document.getElementById('nl-cap').value)||0;
+  const descricao = document.getElementById('nl-desc').value;
+  if (!numero||!nome||!predio_id) { toast('Preencha os campos obrigatórios', 'error'); return; }
+  const { error } = await db.from('laboratorios').insert({ numero, nome, predio_id, andar, tipo, capacidade, descricao });
+  if (error) { toast(error.message, 'error'); return; }
+  toast('Laboratório criado!'); closeModal(); renderLaboratorios();
+}
+
+async function modalEditLab(id) {
+  const [{ data: lab }, { data: predios }] = await Promise.all([
+    db.from('laboratorios').select('*').eq('id', id).single(),
+    db.from('predios').select('*')
+  ]);
+  const opts = (predios||[]).map(p => `<option value="${p.id}" ${p.id===lab.predio_id?'selected':''}>${p.nome}</option>`).join('');
+  openModal('Editar Laboratório', `
+    <div class="form-row">
+      <div class="form-field"><label>Número</label><input id="el-num" value="${lab.numero}"/></div>
+      <div class="form-field"><label>Nome</label><input id="el-nome" value="${lab.nome}"/></div>
+    </div>
+    <div class="form-row">
+      <div class="form-field"><label>Prédio</label><select id="el-predio">${opts}</select></div>
+      <div class="form-field"><label>Andar</label><input type="number" id="el-andar" value="${lab.andar||1}"/></div>
+    </div>
+    <div class="form-row">
+      <div class="form-field"><label>Tipo</label><select id="el-tipo">
+        ${['ti','design','engenharia','arquitetura','multiuso','auditorio','sala_aula'].map(t=>`<option value="${t}" ${t===lab.tipo?'selected':''}>${t}</option>`).join('')}
+      </select></div>
+      <div class="form-field"><label>Capacidade</label><input type="number" id="el-cap" value="${lab.capacidade||0}"/></div>
+    </div>
+    <div class="form-field"><label>Ativo</label><select id="el-ativo"><option value="true" ${lab.ativo?'selected':''}>Sim</option><option value="false" ${!lab.ativo?'selected':''}>Não</option></select></div>
+  `, `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-red" onclick="updateLab('${id}')">Salvar</button>`);
+}
+
+async function updateLab(id) {
+  const { error } = await db.from('laboratorios').update({
+    numero: document.getElementById('el-num').value,
+    nome: document.getElementById('el-nome').value,
+    predio_id: document.getElementById('el-predio').value,
+    andar: parseInt(document.getElementById('el-andar').value)||1,
+    tipo: document.getElementById('el-tipo').value,
+    capacidade: parseInt(document.getElementById('el-cap').value)||0,
+    ativo: document.getElementById('el-ativo').value === 'true'
+  }).eq('id', id);
+  if (error) { toast(error.message, 'error'); return; }
+  toast('Laboratório atualizado!'); closeModal(); renderLaboratorios();
+}
+
+// ============================================================
+// EQUIPAMENTOS
+// ============================================================
+let equipData = [];
+async function renderEquipamentos() {
+  setLoading();
+  const [{ data: equips }, { data: labs }, { data: predios }] = await Promise.all([
+    db.from('equipamentos').select(`*, laboratorios(nome, numero, predio_id, predios(nome, cor))`).order('criado_em', { ascending:false }),
+    db.from('laboratorios').select('*').order('numero'),
+    db.from('predios').select('*')
+  ]);
+  equipData = equips || [];
+
+  if (canEdit()) {
+    document.getElementById('topbar-actions').innerHTML = `
+      <button class="btn btn-ghost btn-sm" onclick="exportCSV(equipData,'equipamentos.csv')">⬇ CSV</button>
+      <button class="btn btn-red" onclick="modalNovoEquip()">＋ Equipamento</button>
+    `;
+  }
+
+  const labOpts = (labs||[]).map(l => `<option value="${l.id}">${l.numero} · ${l.nome}</option>`).join('');
+  const predioOpts = (predios||[]).map(p => `<option value="${p.id}">${p.nome}</option>`).join('');
+
+  renderEquipTable(equipData, labOpts, predioOpts);
+}
+
+function renderEquipTable(data, labOpts='', predioOpts='') {
+  const content = document.getElementById('page-content');
+  if (!content) return;
+
+  const rows = data.map(e => {
+    const lab = e.laboratorios;
+    const predio = lab?.predios;
+    return `
+      <tr id="equip-${e.id}">
+        <td><strong>${e.tipo}</strong></td>
+        <td>${e.marca||'—'} ${e.modelo||''}</td>
+        <td class="td-mono">${e.patrimonio||'—'}</td>
+        <td class="td-mono">${e.numero_serie||'—'}</td>
+        <td>${lab ? `<span style="font-size:12px">${lab.numero} · ${lab.nome}</span>` : '—'}</td>
+        <td>${predio ? predioBadge(predio.nome, predio.cor) : '—'}</td>
+        <td>${statusBadge(e.status)}</td>
+        <td class="actions-cell">
+          <button class="btn btn-ghost btn-sm" onclick="showQR('${e.id}','${e.patrimonio||e.id}')">QR</button>
+          ${canEdit()?`<button class="btn btn-ghost btn-sm" onclick="modalEditEquip('${e.id}')">✏️</button>`:''}
+          ${canEdit()?`<button class="btn btn-ghost btn-sm" onclick="modalNovaManut('${e.id}')">🔧</button>`:''}
+        </td>
+      </tr>`;
+  }).join('');
+
+  const filterHtml = `
+    <div class="filter-bar">
+      <div class="search-bar"><input id="equip-search" placeholder="Buscar..." oninput="filterEquip()"/></div>
+      <select id="equip-status-filter" onchange="filterEquip()">
+        <option value="">Todos os status</option>
+        <option value="operacional">Operacional</option>
+        <option value="manutencao">Manutenção</option>
+        <option value="inativo">Inativo</option>
+        <option value="extraviado">Extraviado</option>
+      </select>
+      <select id="equip-tipo-filter" onchange="filterEquip()">
+        <option value="">Todos os tipos</option>
+        ${['computador','notebook','chromebook','monitor','projetor','amplificador','microfone','switch','roteador','nobreak','impressora','outro'].map(t=>`<option value="${t}">${t}</option>`).join('')}
+      </select>
+    </div>`;
+
+  content.innerHTML = `
+    <div class="section-header"><div><div class="section-title">Equipamentos</div><div class="section-sub">${data.length} registros</div></div></div>
+    ${filterHtml}
+    <div class="table-card" id="equip-table-card">
+      <div class="table-wrap"><table>
+        <thead><tr><th>Tipo</th><th>Marca/Modelo</th><th>Patrimônio</th><th>Série</th><th>Lab</th><th>Prédio</th><th>Status</th><th>Ações</th></tr></thead>
+        <tbody id="equip-tbody">${rows||'<tr><td colspan="8"><div class="empty">Nenhum equipamento.</div></td></tr>'}</tbody>
+      </table></div>
+    </div>`;
+}
+
+function filterEquip() {
+  const q = document.getElementById('equip-search')?.value.toLowerCase()||'';
+  const st = document.getElementById('equip-status-filter')?.value||'';
+  const tp = document.getElementById('equip-tipo-filter')?.value||'';
+  const filtered = equipData.filter(e => {
+    const txt = `${e.tipo} ${e.marca||''} ${e.modelo||''} ${e.patrimonio||''} ${e.numero_serie||''}`.toLowerCase();
+    return (!q||txt.includes(q)) && (!st||e.status===st) && (!tp||e.tipo===tp);
+  });
+  const rows = filtered.map(e => {
+    const lab = e.laboratorios; const predio = lab?.predios;
+    return `<tr id="equip-${e.id}"><td><strong>${e.tipo}</strong></td><td>${e.marca||'—'} ${e.modelo||''}</td><td class="td-mono">${e.patrimonio||'—'}</td><td class="td-mono">${e.numero_serie||'—'}</td><td>${lab?`${lab.numero} · ${lab.nome}`:'—'}</td><td>${predio?predioBadge(predio.nome,predio.cor):'—'}</td><td>${statusBadge(e.status)}</td><td class="actions-cell"><button class="btn btn-ghost btn-sm" onclick="showQR('${e.id}','${e.patrimonio||e.id}')">QR</button>${canEdit()?`<button class="btn btn-ghost btn-sm" onclick="modalEditEquip('${e.id}')">✏️</button><button class="btn btn-ghost btn-sm" onclick="modalNovaManut('${e.id}')">🔧</button>`:''}</td></tr>`;
+  }).join('');
+  const tbody = document.getElementById('equip-tbody');
+  if (tbody) tbody.innerHTML = rows || '<tr><td colspan="8"><div class="empty">Nenhum resultado.</div></td></tr>';
+}
+
+async function refreshEquipamentos() {
+  const { data: equips } = await db.from('equipamentos').select(`*, laboratorios(nome, numero, predio_id, predios(nome, cor))`).order('criado_em', { ascending:false });
+  equipData = equips || [];
+  filterEquip();
+}
+
+async function modalNovoEquip() {
+  const { data: labs } = await db.from('laboratorios').select('*').order('numero');
+  const labOpts = (labs||[]).map(l=>`<option value="${l.id}">${l.numero} · ${l.nome}</option>`).join('');
+  openModal('Novo Equipamento', `
+    <div class="form-row">
+      <div class="form-field"><label>Tipo *</label><select id="ne-tipo">
+        ${['computador','notebook','chromebook','monitor','projetor','amplificador','microfone','receptor_microfone','switch','roteador','nobreak','impressora','outro'].map(t=>`<option value="${t}">${t}</option>`).join('')}
+      </select></div>
+      <div class="form-field"><label>Laboratório *</label><select id="ne-lab"><option value="">Selecione</option>${labOpts}</select></div>
+    </div>
+    <div class="form-row">
+      <div class="form-field"><label>Marca</label><input id="ne-marca" placeholder="Ex: Dell"/></div>
+      <div class="form-field"><label>Modelo</label><input id="ne-modelo" placeholder="Ex: OptiPlex 3070"/></div>
+    </div>
+    <div class="form-row">
+      <div class="form-field"><label>Patrimônio</label><input id="ne-pat" placeholder="00000"/></div>
+      <div class="form-field"><label>Nº Série</label><input id="ne-serie"/></div>
+    </div>
+    <div class="form-row">
+      <div class="form-field"><label>Processador</label><input id="ne-cpu"/></div>
+      <div class="form-field"><label>RAM (GB)</label><input type="number" id="ne-ram"/></div>
+    </div>
+    <div class="form-row">
+      <div class="form-field"><label>Armazenamento (GB)</label><input type="number" id="ne-hd"/></div>
+      <div class="form-field"><label>Sistema Operacional</label><input id="ne-so"/></div>
+    </div>
+    <div class="form-row">
+      <div class="form-field"><label>Status</label><select id="ne-status">
+        <option value="operacional">Operacional</option><option value="manutencao">Manutenção</option><option value="inativo">Inativo</option><option value="extraviado">Extraviado</option>
+      </select></div>
+      <div class="form-field"><label>Data Aquisição</label><input type="date" id="ne-data"/></div>
+    </div>
+    <div class="form-field form-full"><label>Observação</label><textarea id="ne-obs"></textarea></div>
+  `, `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-red" onclick="saveEquip()">Salvar</button>`);
+}
+
+async function saveEquip() {
+  const laboratorio_id = document.getElementById('ne-lab').value;
+  if (!laboratorio_id) { toast('Selecione o laboratório', 'error'); return; }
+  const obj = {
+    laboratorio_id, tipo:document.getElementById('ne-tipo').value,
+    marca:document.getElementById('ne-marca').value||null,
+    modelo:document.getElementById('ne-modelo').value||null,
+    patrimonio:document.getElementById('ne-pat').value||null,
+    numero_serie:document.getElementById('ne-serie').value||null,
+    processador:document.getElementById('ne-cpu').value||null,
+    ram_gb:parseInt(document.getElementById('ne-ram').value)||null,
+    armazenamento_gb:parseInt(document.getElementById('ne-hd').value)||null,
+    sistema_operacional:document.getElementById('ne-so').value||null,
+    status:document.getElementById('ne-status').value,
+    observacao:document.getElementById('ne-obs').value||null,
+    data_aquisicao:document.getElementById('ne-data').value||null
+  };
+  const { error } = await db.from('equipamentos').insert(obj);
+  if (error) { toast(error.message, 'error'); return; }
+  toast('Equipamento cadastrado!'); closeModal(); renderEquipamentos();
+}
+
+async function modalEditEquip(id) {
+  const [{ data: e }, { data: labs }] = await Promise.all([
+    db.from('equipamentos').select('*').eq('id', id).single(),
+    db.from('laboratorios').select('*').order('numero')
+  ]);
+  const labOpts = (labs||[]).map(l=>`<option value="${l.id}" ${l.id===e.laboratorio_id?'selected':''}>${l.numero} · ${l.nome}</option>`).join('');
+  const tiposAll = ['computador','notebook','chromebook','monitor','projetor','amplificador','microfone','receptor_microfone','switch','roteador','nobreak','impressora','outro'];
+  openModal('Editar Equipamento', `
+    <div class="form-row">
+      <div class="form-field"><label>Tipo</label><select id="ee-tipo">${tiposAll.map(t=>`<option value="${t}" ${t===e.tipo?'selected':''}>${t}</option>`).join('')}</select></div>
+      <div class="form-field"><label>Laboratório</label><select id="ee-lab">${labOpts}</select></div>
+    </div>
+    <div class="form-row">
+      <div class="form-field"><label>Marca</label><input id="ee-marca" value="${e.marca||''}"/></div>
+      <div class="form-field"><label>Modelo</label><input id="ee-modelo" value="${e.modelo||''}"/></div>
+    </div>
+    <div class="form-row">
+      <div class="form-field"><label>Patrimônio</label><input id="ee-pat" value="${e.patrimonio||''}"/></div>
+      <div class="form-field"><label>Nº Série</label><input id="ee-serie" value="${e.numero_serie||''}"/></div>
+    </div>
+    <div class="form-row">
+      <div class="form-field"><label>Processador</label><input id="ee-cpu" value="${e.processador||''}"/></div>
+      <div class="form-field"><label>RAM (GB)</label><input type="number" id="ee-ram" value="${e.ram_gb||''}"/></div>
+    </div>
+    <div class="form-row">
+      <div class="form-field"><label>Armazenamento (GB)</label><input type="number" id="ee-hd" value="${e.armazenamento_gb||''}"/></div>
+      <div class="form-field"><label>Sistema Operacional</label><input id="ee-so" value="${e.sistema_operacional||''}"/></div>
+    </div>
+    <div class="form-row">
+      <div class="form-field"><label>Status</label><select id="ee-status">
+        <option value="operacional" ${e.status==='operacional'?'selected':''}>Operacional</option>
+        <option value="manutencao" ${e.status==='manutencao'?'selected':''}>Manutenção</option>
+        <option value="inativo" ${e.status==='inativo'?'selected':''}>Inativo</option>
+        <option value="extraviado" ${e.status==='extraviado'?'selected':''}>Extraviado</option>
+      </select></div>
+      <div class="form-field"><label>Data Aquisição</label><input type="date" id="ee-data" value="${e.data_aquisicao||''}"/></div>
+    </div>
+    <div class="form-field form-full"><label>Observação</label><textarea id="ee-obs">${e.observacao||''}</textarea></div>
+  `, `
+    <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+    ${isAdmin()?`<button class="btn btn-ghost" style="color:var(--red)" onclick="deleteEquip('${id}')">🗑 Excluir</button>`:''}
+    <button class="btn btn-red" onclick="updateEquip('${id}')">Salvar</button>`);
+}
+
+async function updateEquip(id) {
+  const { error } = await db.from('equipamentos').update({
+    tipo:document.getElementById('ee-tipo').value,
+    laboratorio_id:document.getElementById('ee-lab').value,
+    marca:document.getElementById('ee-marca').value||null,
+    modelo:document.getElementById('ee-modelo').value||null,
+    patrimonio:document.getElementById('ee-pat').value||null,
+    numero_serie:document.getElementById('ee-serie').value||null,
+    processador:document.getElementById('ee-cpu').value||null,
+    ram_gb:parseInt(document.getElementById('ee-ram').value)||null,
+    armazenamento_gb:parseInt(document.getElementById('ee-hd').value)||null,
+    sistema_operacional:document.getElementById('ee-so').value||null,
+    status:document.getElementById('ee-status').value,
+    observacao:document.getElementById('ee-obs').value||null,
+    data_aquisicao:document.getElementById('ee-data').value||null
+  }).eq('id', id);
+  if (error) { toast(error.message, 'error'); return; }
+  toast('Equipamento atualizado!'); closeModal(); renderEquipamentos();
+}
+
+async function deleteEquip(id) {
+  if (!confirm('Excluir este equipamento?')) return;
+  const { error } = await db.from('equipamentos').delete().eq('id', id);
+  if (error) { toast(error.message, 'error'); return; }
+  toast('Excluído!', 'info'); closeModal(); renderEquipamentos();
+}
+
+// ============================================================
+// MANUTENÇÕES
+// ============================================================
+let manutData = [];
+async function renderManutencoes() {
+  setLoading();
+  const { data: manut } = await db.from('manutencoes')
+    .select(`*, equipamentos(tipo, marca, modelo, patrimonio, laboratorio_id, laboratorios(numero, nome))`)
+    .order('aberto_em', { ascending:false });
+  manutData = manut || [];
+
+  if (canEdit()) {
+    document.getElementById('topbar-actions').innerHTML = `
+      <button class="btn btn-ghost btn-sm" onclick="exportCSV(manutData,'manutencoes.csv')">⬇ CSV</button>
+      <button class="btn btn-red" onclick="modalNovaManutLivre()">＋ Chamado</button>
+    `;
+  }
+
+  renderManutTable(manutData);
+}
+
+function renderManutTable(data) {
+  const rows = data.map(m => {
+    const e = m.equipamentos;
+    return `
+      <tr>
+        <td><strong>${m.titulo}</strong></td>
+        <td>${e?`${e.tipo} · ${e.marca||''} ${e.modelo||''}`:'—'}</td>
+        <td>${e?.laboratorios?`${e.laboratorios.numero} · ${e.laboratorios.nome}`:'—'}</td>
+        <td>${manutBadge(m.status)}</td>
+        <td>${prioridadeBadge(m.prioridade)}</td>
+        <td class="td-mono">${new Date(m.aberto_em).toLocaleDateString('pt-BR')}</td>
+        <td>${m.resolvido_em?`<span style="font-size:11px;color:var(--green)">✓ ${new Date(m.resolvido_em).toLocaleDateString('pt-BR')}</span>`:'—'}</td>
+        ${canEdit()?`<td><button class="btn btn-ghost btn-sm" onclick="modalEditManut('${m.id}')">✏️</button></td>`:'<td></td>'}
+      </tr>`;
+  }).join('');
+
+  const content = document.getElementById('page-content');
+  const abertos = data.filter(m=>m.status!=='resolvido').length;
+  content.innerHTML = `
+    <div class="section-header"><div><div class="section-title">Manutenções</div><div class="section-sub">${abertos} chamados abertos · ${data.length} total</div></div></div>
+    <div class="filter-bar">
+      <div class="search-bar"><input id="manut-search" placeholder="Buscar..." oninput="filterManut()"/></div>
+      <select id="manut-status-filter" onchange="filterManut()">
+        <option value="">Todos</option>
+        <option value="aberto">Aberto</option>
+        <option value="em_andamento">Em Andamento</option>
+        <option value="resolvido">Resolvido</option>
+      </select>
+      <select id="manut-prio-filter" onchange="filterManut()">
+        <option value="">Prioridades</option>
+        <option value="critica">Crítica</option>
+        <option value="alta">Alta</option>
+        <option value="media">Média</option>
+        <option value="baixa">Baixa</option>
+      </select>
+    </div>
+    <div class="table-card">
+      <div class="table-wrap"><table>
+        <thead><tr><th>Título</th><th>Equipamento</th><th>Lab</th><th>Status</th><th>Prioridade</th><th>Aberto</th><th>Resolvido</th><th></th></tr></thead>
+        <tbody id="manut-tbody">${rows||'<tr><td colspan="8"><div class="empty">Nenhum chamado.</div></td></tr>'}</tbody>
+      </table></div>
+    </div>`;
+}
+
+function filterManut() {
+  const q = document.getElementById('manut-search')?.value.toLowerCase()||'';
+  const st = document.getElementById('manut-status-filter')?.value||'';
+  const pr = document.getElementById('manut-prio-filter')?.value||'';
+  const filtered = manutData.filter(m => {
+    const txt = `${m.titulo} ${m.descricao||''}`.toLowerCase();
+    return (!q||txt.includes(q)) && (!st||m.status===st) && (!pr||m.prioridade===pr);
+  });
+  const rows = filtered.map(m => {
+    const e = m.equipamentos;
+    return `<tr><td><strong>${m.titulo}</strong></td><td>${e?`${e.tipo} · ${e.marca||''} ${e.modelo||''}`:'—'}</td><td>${e?.laboratorios?`${e.laboratorios.numero} · ${e.laboratorios.nome}`:'—'}</td><td>${manutBadge(m.status)}</td><td>${prioridadeBadge(m.prioridade)}</td><td class="td-mono">${new Date(m.aberto_em).toLocaleDateString('pt-BR')}</td><td>${m.resolvido_em?`<span style="font-size:11px;color:var(--green)">✓ ${new Date(m.resolvido_em).toLocaleDateString('pt-BR')}</span>`:'—'}</td>${canEdit()?`<td><button class="btn btn-ghost btn-sm" onclick="modalEditManut('${m.id}')">✏️</button></td>`:'<td></td>'}</tr>`;
+  }).join('');
+  const tbody = document.getElementById('manut-tbody');
+  if (tbody) tbody.innerHTML = rows || '<tr><td colspan="8"><div class="empty">Sem resultados.</div></td></tr>';
+}
+
+async function refreshManutencoes() {
+  const { data: manut } = await db.from('manutencoes').select(`*, equipamentos(tipo, marca, modelo, patrimonio, laboratorio_id, laboratorios(numero, nome))`).order('aberto_em', { ascending:false });
+  manutData = manut || [];
+  filterManut();
+}
+
+async function modalNovaManut(equipId) {
+  const { data: e } = await db.from('equipamentos').select('tipo,marca,modelo,patrimonio').eq('id', equipId).single();
+  openModal(`Novo Chamado · ${e?.tipo||''} ${e?.marca||''} ${e?.modelo||''}`, `
+    <div class="form-field"><label>Título *</label><input id="nm-titulo" placeholder="Descreva o problema..."/></div>
+    <div class="form-field"><label>Descrição</label><textarea id="nm-desc" placeholder="Detalhes do problema..."></textarea></div>
+    <div class="form-row">
+      <div class="form-field"><label>Prioridade</label><select id="nm-prio"><option value="baixa">Baixa</option><option value="media" selected>Média</option><option value="alta">Alta</option><option value="critica">Crítica</option></select></div>
+      <div class="form-field"><label>Status</label><select id="nm-status"><option value="aberto" selected>Aberto</option><option value="em_andamento">Em Andamento</option><option value="resolvido">Resolvido</option></select></div>
+    </div>
+  `, `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-red" onclick="saveManut('${equipId}')">Abrir Chamado</button>`);
+}
+
+async function modalNovaManutLivre() {
+  const { data: equips } = await db.from('equipamentos').select('id,tipo,marca,modelo,patrimonio').order('tipo');
+  const opts = (equips||[]).map(e=>`<option value="${e.id}">${e.tipo} · ${e.marca||''} ${e.modelo||''} (${e.patrimonio||'s/pat'})</option>`).join('');
+  openModal('Novo Chamado de Manutenção', `
+    <div class="form-field"><label>Equipamento *</label><select id="nm-equip"><option value="">Selecione</option>${opts}</select></div>
+    <div class="form-field"><label>Título *</label><input id="nm-titulo" placeholder="Descreva o problema..."/></div>
+    <div class="form-field"><label>Descrição</label><textarea id="nm-desc"></textarea></div>
+    <div class="form-row">
+      <div class="form-field"><label>Prioridade</label><select id="nm-prio"><option value="baixa">Baixa</option><option value="media" selected>Média</option><option value="alta">Alta</option><option value="critica">Crítica</option></select></div>
+      <div class="form-field"><label>Status</label><select id="nm-status"><option value="aberto" selected>Aberto</option><option value="em_andamento">Em Andamento</option></select></div>
+    </div>
+  `, `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-red" onclick="saveManutLivre()">Abrir Chamado</button>`);
+}
+
+async function saveManut(equipId) {
+  const titulo = document.getElementById('nm-titulo').value.trim();
+  if (!titulo) { toast('Título obrigatório', 'error'); return; }
+  const { error } = await db.from('manutencoes').insert({
+    equipamento_id: equipId, titulo,
+    descricao: document.getElementById('nm-desc').value||null,
+    prioridade: document.getElementById('nm-prio').value,
+    status: document.getElementById('nm-status').value,
+    responsavel_id: currentUser.id
+  });
+  if (error) { toast(error.message, 'error'); return; }
+  toast('Chamado aberto!'); closeModal();
+  if (currentPage==='manutencoes') renderManutencoes();
+  if (currentPage==='equipamentos') toast('Chamado aberto com sucesso!');
+}
+
+async function saveManutLivre() {
+  const equipId = document.getElementById('nm-equip').value;
+  const titulo = document.getElementById('nm-titulo').value.trim();
+  if (!equipId||!titulo) { toast('Preencha equipamento e título', 'error'); return; }
+  const { error } = await db.from('manutencoes').insert({
+    equipamento_id: equipId, titulo,
+    descricao: document.getElementById('nm-desc').value||null,
+    prioridade: document.getElementById('nm-prio').value,
+    status: document.getElementById('nm-status').value,
+    responsavel_id: currentUser.id
+  });
+  if (error) { toast(error.message, 'error'); return; }
+  toast('Chamado aberto!'); closeModal(); renderManutencoes();
+}
+
+async function modalEditManut(id) {
+  const { data: m } = await db.from('manutencoes').select('*').eq('id', id).single();
+  openModal('Editar Chamado', `
+    <div class="form-field"><label>Título</label><input id="em-titulo" value="${m.titulo}"/></div>
+    <div class="form-field"><label>Descrição</label><textarea id="em-desc">${m.descricao||''}</textarea></div>
+    <div class="form-row">
+      <div class="form-field"><label>Prioridade</label><select id="em-prio">
+        ${['baixa','media','alta','critica'].map(p=>`<option value="${p}" ${p===m.prioridade?'selected':''}>${p}</option>`).join('')}
+      </select></div>
+      <div class="form-field"><label>Status</label><select id="em-status">
+        ${['aberto','em_andamento','resolvido'].map(s=>`<option value="${s}" ${s===m.status?'selected':''}>${s}</option>`).join('')}
+      </select></div>
+    </div>
+  `, `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-red" onclick="updateManut('${id}')">Salvar</button>`);
+}
+
+async function updateManut(id) {
+  const status = document.getElementById('em-status').value;
+  const { error } = await db.from('manutencoes').update({
+    titulo: document.getElementById('em-titulo').value,
+    descricao: document.getElementById('em-desc').value||null,
+    prioridade: document.getElementById('em-prio').value,
+    status,
+    resolvido_em: status==='resolvido' ? new Date().toISOString() : null
+  }).eq('id', id);
+  if (error) { toast(error.message, 'error'); return; }
+  toast('Chamado atualizado!'); closeModal(); renderManutencoes();
+}
+
+// ============================================================
+// SOFTWARES
+// ============================================================
+async function renderSoftwares() {
+  setLoading();
+  const { data: sws } = await db.from('softwares').select(`*, laboratorios(nome, numero)`).order('nome');
+
+  if (canEdit()) {
+    document.getElementById('topbar-actions').innerHTML = `<button class="btn btn-red" onclick="modalNovoSw()">＋ Software</button>`;
+  }
+
+  const rows = (sws||[]).map(s => `
+    <tr>
+      <td><strong>${s.nome}</strong></td>
+      <td class="td-mono">${s.versao||'—'}</td>
+      <td><span class="badge badge-blue">${s.licenca||'—'}</span></td>
+      <td>${s.laboratorios?`${s.laboratorios.numero} · ${s.laboratorios.nome}`:'—'}</td>
+      ${canEdit()?`<td><button class="btn btn-ghost btn-sm" onclick="deleteSw('${s.id}')">🗑</button></td>`:'<td></td>'}
+    </tr>`).join('');
+
+  setContent(`
+    <div class="section-header"><div><div class="section-title">Softwares</div><div class="section-sub">${sws?.length||0} registros</div></div></div>
+    <div class="table-card">
+      <div class="table-wrap"><table>
+        <thead><tr><th>Nome</th><th>Versão</th><th>Licença</th><th>Laboratório</th><th></th></tr></thead>
+        <tbody>${rows||'<tr><td colspan="5"><div class="empty">Nenhum software.</div></td></tr>'}</tbody>
+      </table></div>
+    </div>`);
+}
+
+async function modalNovoSw() {
+  const { data: labs } = await db.from('laboratorios').select('*').order('numero');
+  const labOpts = (labs||[]).map(l=>`<option value="${l.id}">${l.numero} · ${l.nome}</option>`).join('');
+  openModal('Novo Software', `
+    <div class="form-row">
+      <div class="form-field"><label>Nome *</label><input id="ns-nome"/></div>
+      <div class="form-field"><label>Versão</label><input id="ns-ver"/></div>
+    </div>
+    <div class="form-row">
+      <div class="form-field"><label>Licença</label><select id="ns-lic"><option value="gratuito">Gratuito</option><option value="licenciado">Licenciado</option><option value="educacional">Educacional</option><option value="trial">Trial</option></select></div>
+      <div class="form-field"><label>Laboratório *</label><select id="ns-lab"><option value="">Selecione</option>${labOpts}</select></div>
+    </div>
+  `, `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-red" onclick="saveSw()">Salvar</button>`);
+}
+
+async function saveSw() {
+  const nome = document.getElementById('ns-nome').value.trim();
+  const laboratorio_id = document.getElementById('ns-lab').value;
+  if (!nome||!laboratorio_id) { toast('Preencha nome e laboratório', 'error'); return; }
+  const { error } = await db.from('softwares').insert({ nome, versao:document.getElementById('ns-ver').value||null, licenca:document.getElementById('ns-lic').value, laboratorio_id });
+  if (error) { toast(error.message, 'error'); return; }
+  toast('Software cadastrado!'); closeModal(); renderSoftwares();
+}
+
+async function deleteSw(id) {
+  if (!confirm('Excluir este software?')) return;
+  await db.from('softwares').delete().eq('id', id);
+  toast('Removido!', 'info'); renderSoftwares();
+}
+
+// ============================================================
+// USUÁRIOS
+// ============================================================
+async function renderUsuarios() {
+  setLoading();
+  if (!isAdmin()) { setContent('<div class="empty-state"><div class="es-icon">🔒</div><h3>Acesso Restrito</h3><p>Apenas administradores podem gerenciar usuários.</p></div>'); return; }
+  const { data: perfis } = await db.from('perfis').select('*').order('nome');
+
+  document.getElementById('topbar-actions').innerHTML = `<button class="btn btn-red" onclick="modalNovoUsuario()">＋ Usuário</button>`;
+
+  const rows = (perfis||[]).map(p => `
+    <tr>
+      <td><div style="display:flex;align-items:center;gap:10px"><div style="width:32px;height:32px;border-radius:50%;background:var(--red);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px">${p.nome[0].toUpperCase()}</div>${p.nome}</div></td>
+      <td class="td-mono">${p.email}</td>
+      <td><span class="badge ${p.role==='admin'?'badge-red':p.role==='tecnico'?'badge-blue':'badge-gray'}">${p.role}</span></td>
+      <td>${p.ativo?'<span class="badge badge-green">Ativo</span>':'<span class="badge badge-gray">Inativo</span>'}</td>
+      <td class="td-mono">${new Date(p.criado_em).toLocaleDateString('pt-BR')}</td>
+      <td><button class="btn btn-ghost btn-sm" onclick="modalEditUser('${p.id}')">✏️</button></td>
+    </tr>`).join('');
+
+  setContent(`
+    <div class="section-header"><div><div class="section-title">Usuários</div><div class="section-sub">${perfis?.length||0} cadastrados</div></div></div>
+    <div class="table-card">
+      <div class="table-wrap"><table>
+        <thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>Status</th><th>Cadastrado</th><th></th></tr></thead>
+        <tbody>${rows||'<tr><td colspan="6"><div class="empty">Nenhum usuário.</div></td></tr>'}</tbody>
+      </table></div>
+    </div>`);
+}
+
+function modalNovoUsuario() {
+  openModal('Convidar Usuário', `
+    <p style="color:var(--text2);font-size:13px;margin-bottom:20px">O usuário receberá um link de convite para definir sua senha.</p>
+    <div class="form-field"><label>Nome *</label><input id="nu-nome"/></div>
+    <div class="form-field"><label>E-mail *</label><input type="email" id="nu-email"/></div>
+    <div class="form-field"><label>Perfil</label><select id="nu-role"><option value="visualizador">Visualizador</option><option value="tecnico">Técnico</option><option value="admin">Admin</option></select></div>
+  `, `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-red" onclick="saveUser()">Convidar</button>`);
+}
+
+async function saveUser() {
+  const nome = document.getElementById('nu-nome').value.trim();
+  const email = document.getElementById('nu-email').value.trim();
+  const role = document.getElementById('nu-role').value;
+  if (!nome||!email) { toast('Preencha nome e e-mail', 'error'); return; }
+  // Invite user via Supabase
+  const { data, error } = await db.auth.admin?.inviteUserByEmail
+    ? db.auth.admin.inviteUserByEmail(email)
+    : { error: null };
+  // Create profile record - admin would need to create via edge function in production
+  // For now we insert profile assuming user will be created
+  toast('Para convidar usuários via e-mail, use o painel Supabase → Authentication → Users', 'info');
+  closeModal();
+}
+
+async function modalEditUser(id) {
+  const { data: p } = await db.from('perfis').select('*').eq('id', id).single();
+  openModal('Editar Usuário', `
+    <div class="form-field"><label>Nome</label><input id="eu-nome" value="${p.nome}"/></div>
+    <div class="form-field"><label>Perfil</label><select id="eu-role">
+      ${['visualizador','tecnico','admin'].map(r=>`<option value="${r}" ${r===p.role?'selected':''}>${r}</option>`).join('')}
+    </select></div>
+    <div class="form-field"><label>Ativo</label><select id="eu-ativo">
+      <option value="true" ${p.ativo?'selected':''}>Sim</option>
+      <option value="false" ${!p.ativo?'selected':''}>Não</option>
+    </select></div>
+  `, `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-red" onclick="updateUser('${id}')">Salvar</button>`);
+}
+
+async function updateUser(id) {
+  const { error } = await db.from('perfis').update({
+    nome: document.getElementById('eu-nome').value,
+    role: document.getElementById('eu-role').value,
+    ativo: document.getElementById('eu-ativo').value === 'true'
+  }).eq('id', id);
+  if (error) { toast(error.message, 'error'); return; }
+  toast('Usuário atualizado!'); closeModal(); renderUsuarios();
+}
+
+// ============================================================
+// RELATÓRIOS
+// ============================================================
+async function renderRelatorios() {
+  setLoading();
+  const [{ data: equips }, { data: manut }, { data: labs }] = await Promise.all([
+    db.from('equipamentos').select(`*, laboratorios(nome, numero, predios:predio_id(nome))`),
+    db.from('manutencoes').select(`*, equipamentos(tipo, marca, modelo, patrimonio)`),
+    db.from('vw_lab_resumo').select('*')
+  ]);
+
+  const byStatus = {};
+  (equips||[]).forEach(e => { byStatus[e.status] = (byStatus[e.status]||0)+1; });
+  const byTipo = {};
+  (equips||[]).forEach(e => { byTipo[e.tipo] = (byTipo[e.tipo]||0)+1; });
+  const manutPend = (manut||[]).filter(m=>m.status!=='resolvido').length;
+  const manutRes = (manut||[]).filter(m=>m.status==='resolvido').length;
+
+  const statusRows = Object.entries(byStatus).map(([k,v])=>`<tr><td>${k}</td><td class="td-mono">${v}</td><td>${Math.round(v/(equips?.length||1)*100)}%</td></tr>`).join('');
+  const tipoRows = Object.entries(byTipo).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<tr><td>${k}</td><td class="td-mono">${v}</td></tr>`).join('');
+
+  setContent(`
+    <div class="section-header">
+      <div><div class="section-title">Relatórios</div><div class="section-sub">Visão analítica do inventário</div></div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-ghost" onclick="exportCSV(${JSON.stringify(JSON.stringify(equips||[]))}.split('').map(()=>({})),'equip.csv')" onclick="exportCSV(equipData||[],'equipamentos.csv')">⬇ Equip. CSV</button>
+      </div>
+    </div>
+    <div class="stat-grid" style="margin-bottom:24px">
+      <div class="stat-card blue"><div class="label">Total Equip.</div><div class="value">${equips?.length||0}</div></div>
+      <div class="stat-card green"><div class="label">Operacionais</div><div class="value">${byStatus['operacional']||0}</div></div>
+      <div class="stat-card orange"><div class="label">Chamados Abertos</div><div class="value">${manutPend}</div></div>
+      <div class="stat-card"><div class="label">Chamados Resolvidos</div><div class="value">${manutRes}</div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+      <div class="table-card">
+        <div class="table-header"><span class="table-title">Por Status</span></div>
+        <div class="table-wrap"><table><thead><tr><th>Status</th><th>Qtd</th><th>%</th></tr></thead><tbody>${statusRows}</tbody></table></div>
+      </div>
+      <div class="table-card">
+        <div class="table-header"><span class="table-title">Por Tipo</span></div>
+        <div class="table-wrap"><table><thead><tr><th>Tipo</th><th>Qtd</th></tr></thead><tbody>${tipoRows}</tbody></table></div>
+      </div>
+    </div>
+    <div class="table-card" style="margin-top:20px">
+      <div class="table-header">
+        <span class="table-title">Resumo por Laboratório</span>
+        <button class="btn btn-ghost btn-sm" onclick="exportCSV(${encodeURIComponent(JSON.stringify(labs||[]))}, 'labs.csv')" onclick="exportCSV(${JSON.stringify(labs||[])}, 'labs_resumo.csv')">⬇ CSV</button>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Lab</th><th>Prédio</th><th>Máquinas</th><th>Disponíveis</th><th>Manutenção</th><th>Softwares</th></tr></thead>
+        <tbody>${(labs||[]).map(l=>`<tr><td>${l.numero} · ${l.nome}</td><td>${predioBadge(l.predio||'—',l.predio_cor||'#666')}</td><td class="td-mono">${l.total_maquinas||0}</td><td><span class="badge badge-green">${l.maquinas_ok||0}</span></td><td>${l.em_manutencao>0?`<span class="badge badge-orange">${l.em_manutencao}</span>`:'—'}</td><td class="td-mono">${l.total_softwares||0}</td></tr>`).join('')}</tbody>
+      </table></div>
+    </div>
+    <div style="margin-top:12px;text-align:right">
+      <button class="btn btn-green" onclick="exportRelatorio()">⬇ Exportar Relatório Completo (CSV)</button>
+    </div>
+  `);
+}
+
+async function exportRelatorio() {
+  const { data } = await db.from('equipamentos').select(`tipo,marca,modelo,patrimonio,numero_serie,processador,ram_gb,armazenamento_gb,sistema_operacional,status,observacao,data_aquisicao, laboratorios(numero,nome,predios:predio_id(nome))`);
+  const flat = (data||[]).map(e => ({
+    tipo:e.tipo, marca:e.marca, modelo:e.modelo, patrimonio:e.patrimonio,
+    numero_serie:e.numero_serie, processador:e.processador, ram_gb:e.ram_gb,
+    hd_gb:e.armazenamento_gb, so:e.sistema_operacional, status:e.status,
+    lab:e.laboratorios?.nome, lab_num:e.laboratorios?.numero,
+    predio:e.laboratorios?.predios?.nome, observacao:e.observacao,
+    data_aquisicao:e.data_aquisicao
+  }));
+  exportCSV(flat, `inventario_nati_${new Date().toISOString().split('T')[0]}.csv`);
+}
+</script>
+</body>
+</html>
