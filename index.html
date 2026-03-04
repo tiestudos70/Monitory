@@ -119,6 +119,7 @@
   .badge-orange { background:rgba(255,152,0,0.12); color:var(--orange); }
   .badge-gray { background:rgba(255,255,255,0.07); color:var(--text2); }
   .badge-blue { background:rgba(0,102,255,0.12); color:#6699ff; }
+  .badge-yellow { background:rgba(255,214,0,0.12); color:var(--yellow); }
 
   /* BUTTONS */
   .btn { display:inline-flex; align-items:center; gap:6px; padding:8px 16px; border-radius:var(--radius-sm); font-family:'Space Grotesk',sans-serif; font-size:13px; font-weight:600; cursor:pointer; transition:all 0.2s; border:none; white-space:nowrap; }
@@ -200,6 +201,40 @@
   #qr-canvas { display:flex; justify-content:center; margin:20px 0; }
   #qr-canvas > div { background:#fff; padding:16px; border-radius:8px; }
 
+  /* UNSAVED CHANGES INDICATOR */
+  .dirty-dot { width:7px; height:7px; border-radius:50%; background:var(--orange); display:inline-block; margin-left:6px; animation:pulse 1.5s infinite; }
+
+  /* PAGINATION */
+  .pagination { display:flex; align-items:center; justify-content:flex-end; gap:8px; padding:12px 16px; border-top:1px solid var(--border); }
+  .pagination .pg-info { font-size:12px; color:var(--text2); margin-right:8px; }
+  .pg-btn { width:32px; height:32px; border-radius:6px; background:var(--bg3); border:1px solid var(--border); color:var(--text2); cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:13px; transition:all 0.15s; }
+  .pg-btn:hover { border-color:var(--border2); color:var(--text); }
+  .pg-btn.active { background:rgba(200,16,46,0.15); border-color:rgba(200,16,46,0.3); color:var(--red); font-weight:700; }
+  .pg-btn:disabled { opacity:0.3; cursor:not-allowed; }
+
+  /* ALERT WARNING ROW */
+  .row-warn td:first-child { border-left:2px solid var(--orange); }
+  .row-sem-pat { opacity:0.75; }
+  .pat-missing { font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--orange); background:rgba(255,152,0,0.1); padding:2px 6px; border-radius:4px; }
+
+  /* HISTORY PANEL */
+  .hist-list { display:flex; flex-direction:column; gap:8px; margin-top:8px; }
+  .hist-item { background:var(--bg3); border-radius:8px; padding:12px 14px; border-left:3px solid var(--border2); }
+  .hist-item.open { border-left-color:var(--red); }
+  .hist-item.em_andamento { border-left-color:var(--orange); }
+  .hist-item.resolvido { border-left-color:var(--green); }
+  .hist-title { font-size:13px; font-weight:600; }
+  .hist-meta { font-size:11px; color:var(--text2); margin-top:3px; display:flex; gap:10px; }
+
+  /* DASHBOARD CRÍTICO */
+  .critical-labs { margin-top:16px; }
+  .critical-lab-row { display:flex; align-items:center; gap:12px; padding:10px 14px; background:var(--bg3); border-radius:8px; margin-bottom:6px; cursor:pointer; transition:background 0.15s; }
+  .critical-lab-row:hover { background:var(--bg4); }
+  .clr-name { flex:1; font-size:13px; font-weight:600; }
+  .clr-bar { flex:1; height:6px; background:var(--bg4); border-radius:3px; overflow:hidden; }
+  .clr-bar-fill { height:100%; border-radius:3px; }
+  .clr-pct { font-family:'JetBrains Mono',monospace; font-size:12px; width:36px; text-align:right; }
+
   /* ============ DASHBOARD LIGHT THEME ============ */
   .dash-wrap { background:#f4f4f0; border-radius:var(--radius); padding:28px; margin:-8px; }
   .dash-kpi-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:16px; margin-bottom:28px; }
@@ -227,6 +262,15 @@
   .dash-chart-box .chart-title { font-size:11px; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; color:#888; margin-bottom:16px; }
   .dash-chart-box canvas { max-height:220px; }
   .dash-chart-full canvas { max-height:180px; }
+  .dash-critical-box { background:#fff; border-radius:12px; padding:22px 24px; box-shadow:0 1px 4px rgba(0,0,0,0.07); }
+  .dash-critical-box .chart-title { font-size:11px; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; color:#888; margin-bottom:12px; display:flex; align-items:center; justify-content:space-between; }
+  .clr-dark { background:var(--bg4); border-radius:8px; padding:8px 12px; margin-bottom:5px; display:flex; align-items:center; gap:10px; cursor:pointer; transition:background 0.15s; }
+  .clr-dark:hover { background:rgba(255,255,255,0.06); }
+  .clr-dark .clr-name { font-size:12px; font-weight:600; color:var(--text); flex:1; }
+  .clr-dark .clr-bar { flex:1; height:5px; background:rgba(255,255,255,0.06); border-radius:3px; overflow:hidden; }
+  .clr-dark .clr-bar-fill { height:100%; border-radius:3px; }
+  .clr-dark .clr-pct { font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--text2); width:32px; text-align:right; }
+  .clr-dark .clr-issues { font-size:11px; color:var(--orange); font-weight:700; }
 
   /* ============ 3D LAB PAGE ============ */
   #page-lab3d { display:none; position:absolute; top:57px; left:0; right:0; bottom:0; }
@@ -380,17 +424,17 @@
     </div>
     <div class="sidebar-nav">
       <div class="nav-section">Principal</div>
-      <div class="nav-item active" onclick="showPage('dashboard')"><span class="icon">📊</span> Dashboard</div>
-      <div class="nav-item" onclick="showPage('predios')"><span class="icon">🏢</span> Prédios</div>
-      <div class="nav-item" onclick="showPage('laboratorios')"><span class="icon">🔬</span> Laboratórios</div>
-      <div class="nav-item" onclick="showPage('lab3d')"><span class="icon">🧊</span> Laboratórios 3D</div>
+      <div class="nav-item active" onclick="navTo('dashboard')"><span class="icon">📊</span> Dashboard</div>
+      <div class="nav-item" onclick="navTo('predios')"><span class="icon">🏢</span> Prédios</div>
+      <div class="nav-item" onclick="navTo('laboratorios')"><span class="icon">🔬</span> Laboratórios</div>
+      <div class="nav-item" onclick="navTo('lab3d')"><span class="icon">🧊</span> Laboratórios 3D</div>
       <div class="nav-section">Ativos</div>
-      <div class="nav-item" onclick="showPage('equipamentos')"><span class="icon">💻</span> Equipamentos</div>
-      <div class="nav-item" onclick="showPage('manutencoes')"><span class="icon">🔧</span> Manutenções</div>
-      <div class="nav-item" onclick="showPage('softwares')"><span class="icon">📦</span> Softwares</div>
+      <div class="nav-item" onclick="navTo('equipamentos')"><span class="icon">💻</span> Equipamentos</div>
+      <div class="nav-item" onclick="navTo('manutencoes')"><span class="icon">🔧</span> Manutenções</div>
+      <div class="nav-item" onclick="navTo('softwares')"><span class="icon">📦</span> Softwares</div>
       <div class="nav-section">Sistema</div>
-      <div class="nav-item" onclick="showPage('usuarios')"><span class="icon">👥</span> Usuários</div>
-      <div class="nav-item" onclick="showPage('relatorios')"><span class="icon">📋</span> Relatórios</div>
+      <div class="nav-item" onclick="navTo('usuarios')"><span class="icon">👥</span> Usuários</div>
+      <div class="nav-item" onclick="navTo('relatorios')"><span class="icon">📋</span> Relatórios</div>
     </div>
     <div class="sidebar-footer">
       <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text2);margin-bottom:10px;">
@@ -570,6 +614,14 @@ let currentRole = null;
 let currentPage = 'dashboard';
 let realtimeChannels = [];
 
+// FIX #3: Dirty tracking para avisar ao sair com formulário preenchido
+let _formDirty = false;
+
+// Pagination state
+const PAGE_SIZE = 50;
+let equipPage = 0;
+let manutPage = 0;
+
 // 3D state
 let lab3dState = {
   predios: [], laboratorios: [], equipamentos: [],
@@ -579,6 +631,13 @@ let lab3dState = {
 };
 let _3dEventsSetup = false;
 let _3dResizeTimer = null;
+
+// FIX #2: Realtime - debounce por tabela para evitar refresh em cascata
+let _realtimeDebounce = {};
+function debouncedRefresh(table, fn, delay=800) {
+  if (_realtimeDebounce[table]) clearTimeout(_realtimeDebounce[table]);
+  _realtimeDebounce[table] = setTimeout(fn, delay);
+}
 
 // ============================================================
 // AUTH
@@ -635,24 +694,46 @@ async function initApp() {
 })();
 
 // ============================================================
-// REALTIME
+// FIX #2: REALTIME — granular, sem reload agressivo
 // ============================================================
 function setupRealtime() {
   const ch = db.channel('global-changes')
-    .on('postgres_changes', { event:'*', schema:'public' }, payload => {
-      toast(`Atualização: ${payload.table}`, 'info');
-      if (currentPage === 'dashboard') showPage('dashboard');
-      if (currentPage === 'equipamentos') refreshEquipamentos();
-      if (currentPage === 'manutencoes') refreshManutencoes();
-      if (currentPage === 'lab3d') load3dData();
+    .on('postgres_changes', { event:'*', schema:'public', table:'equipamentos' }, () => {
+      debouncedRefresh('equipamentos', () => {
+        if (currentPage === 'equipamentos') refreshEquipamentos();
+        if (currentPage === 'lab3d') load3dData().then(() => { build3dSidebar(); if(lab3dState.currentLab) draw3dLab(); });
+        if (currentPage === 'dashboard') renderDashboard();
+      });
+    })
+    .on('postgres_changes', { event:'*', schema:'public', table:'manutencoes' }, () => {
+      debouncedRefresh('manutencoes', () => {
+        if (currentPage === 'manutencoes') refreshManutencoes();
+        if (currentPage === 'dashboard') renderDashboard();
+      });
+    })
+    .on('postgres_changes', { event:'*', schema:'public', table:'laboratorios' }, () => {
+      debouncedRefresh('laboratorios', () => {
+        if (currentPage === 'laboratorios') renderLaboratorios();
+        if (currentPage === 'lab3d') load3dData().then(build3dSidebar);
+      });
     })
     .subscribe();
   realtimeChannels.push(ch);
 }
 
 // ============================================================
-// NAVIGATION
+// FIX #3: NAVIGATION — avisa se formulário tem dados não salvos
 // ============================================================
+function navTo(page) {
+  if (_formDirty) {
+    if (!confirm('Você tem alterações não salvas. Deseja sair mesmo assim?')) return;
+  }
+  _formDirty = false;
+  showPage(page);
+}
+
+function markDirty() { _formDirty = true; }
+
 function showPage(page) {
   currentPage = page;
   document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
@@ -699,9 +780,24 @@ function openModal(title, body, footer='') {
   document.getElementById('modal-body').innerHTML = body;
   document.getElementById('modal-footer').innerHTML = footer;
   document.getElementById('modal-overlay').classList.add('open');
+  // Track dirty on any input change inside modal
+  setTimeout(() => {
+    document.querySelectorAll('#modal-body input, #modal-body select, #modal-body textarea').forEach(el => {
+      el.addEventListener('input', markDirty, { once: true });
+      el.addEventListener('change', markDirty, { once: true });
+    });
+  }, 50);
 }
-function closeModal() { document.getElementById('modal-overlay').classList.remove('open'); }
-document.getElementById('modal-overlay').addEventListener('click', e => { if(e.target===document.getElementById('modal-overlay')) closeModal(); });
+function closeModal() {
+  document.getElementById('modal-overlay').classList.remove('open');
+  _formDirty = false;
+}
+document.getElementById('modal-overlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('modal-overlay')) {
+    if (_formDirty && !confirm('Descartar alterações?')) return;
+    closeModal();
+  }
+});
 
 function canEdit() { return currentRole==='admin' || currentRole==='tecnico'; }
 function isAdmin() { return currentRole==='admin'; }
@@ -728,7 +824,7 @@ function predioBadge(nome, cor) {
 function exportCSV(data, filename) {
   if (!data||!data.length) { toast('Sem dados para exportar', 'error'); return; }
   const keys = Object.keys(data[0]);
-  const csv = [keys.join(','), ...data.map(r => keys.map(k => `"${r[k]??''}"`).join(','))].join('\n');
+  const csv = [keys.join(','), ...data.map(r => keys.map(k => `"${String(r[k]??'').replace(/"/g,'""')}"`).join(','))].join('\n');
   const a = document.createElement('a');
   a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
   a.download = filename;
@@ -745,13 +841,29 @@ function showQR(id, label) {
   `, `<button class="btn btn-ghost" onclick="closeModal()">Fechar</button>`);
   setTimeout(() => {
     new QRCode(document.getElementById('qr-canvas'), {
-      text: `${location.href}?asset=${id}`, width:180, height:180, colorDark:'#000', colorLight:'#fff'
+      text: `${location.origin}${location.pathname}?asset=${id}`, width:180, height:180, colorDark:'#000', colorLight:'#fff'
     });
   }, 100);
 }
 
 // ============================================================
-// DASHBOARD
+// PAGINATION HELPER
+// ============================================================
+function buildPagination(total, page, onChangeFn, containerId) {
+  const pages = Math.ceil(total / PAGE_SIZE);
+  if (pages <= 1) return '';
+  let btns = '';
+  const start = Math.max(0, page - 2);
+  const end = Math.min(pages - 1, page + 2);
+  if (start > 0) btns += `<button class="pg-btn" onclick="${onChangeFn}(0)">1</button>${start>1?'<span style="color:var(--text2);padding:0 4px">…</span>':''}`;
+  for (let i=start; i<=end; i++) btns += `<button class="pg-btn${i===page?' active':''}" onclick="${onChangeFn}(${i})">${i+1}</button>`;
+  if (end < pages-1) btns += `${end<pages-2?'<span style="color:var(--text2);padding:0 4px">…</span>':''}<button class="pg-btn" onclick="${onChangeFn}(${pages-1})">${pages}</button>`;
+  const from = page*PAGE_SIZE+1, to = Math.min((page+1)*PAGE_SIZE, total);
+  return `<div class="pagination"><span class="pg-info">Exibindo ${from}–${to} de ${total}</span><button class="pg-btn" onclick="${onChangeFn}(${page-1})" ${page===0?'disabled':''}>‹</button>${btns}<button class="pg-btn" onclick="${onChangeFn}(${page+1})" ${page===pages-1?'disabled':''}>›</button></div>`;
+}
+
+// ============================================================
+// DASHBOARD — com ranking de labs críticos
 // ============================================================
 let _dashCharts = [];
 
@@ -785,9 +897,19 @@ async function renderDashboard() {
   const em_manut = equip?.filter(e=>e.status==='manutencao').length || 0;
   const inativos = equip?.filter(e=>e.status==='inativo').length || 0;
   const extraviado = equip?.filter(e=>e.status==='extraviado').length || 0;
+  const sem_pat = equip?.filter(e=>!e.patrimonio).length || 0;
   const labs_ativos = labs?.filter(l=>l.ativo).length || 0;
   const pendentes = manut?.length || 0;
   const pct = total_equip ? Math.round(op/total_equip*100) : 0;
+
+  // FIX #4: Ranking dos labs mais críticos
+  const labRanking = (labs||[]).map(l => {
+    const leqs = (equip||[]).filter(e=>e.laboratorio_id===l.id);
+    const lok = leqs.filter(e=>e.status==='operacional').length;
+    const lbad = leqs.filter(e=>e.status==='manutencao'||e.status==='inativo'||e.status==='extraviado').length;
+    const lpct = leqs.length ? Math.round(lok/leqs.length*100) : 100;
+    return { id:l.id, nome:`${l.numero} · ${l.nome}`, total:leqs.length, ok:lok, bad:lbad, pct:lpct };
+  }).filter(l=>l.total>0).sort((a,b)=>a.pct-b.pct).slice(0,5);
 
   const tipoCount = {};
   (equip||[]).forEach(e => { tipoCount[e.tipo] = (tipoCount[e.tipo]||0)+1; });
@@ -805,6 +927,18 @@ async function renderDashboard() {
     }).length);
   }
 
+  const criticalHTML = labRanking.length ? labRanking.map(l => {
+    const pctColor = l.pct>80?'#2ecc71':l.pct>50?'#e67e22':'#c8102e';
+    return `<div class="clr-dark" onclick="goto3dLab('${l.id}')">
+      <div class="clr-name">${l.nome}</div>
+      <div class="clr-bar"><div class="clr-bar-fill" style="width:${l.pct}%;background:${pctColor}"></div></div>
+      <div class="clr-pct" style="color:${pctColor}">${l.pct}%</div>
+      ${l.bad>0?`<div class="clr-issues">⚠ ${l.bad}</div>`:''}
+    </div>`;
+  }).join('') : '<p style="color:var(--text2);font-size:13px">Nenhum dado ainda.</p>';
+
+  const semPatHTML = sem_pat > 0 ? `<div class="dash-kpi kpi-orange" style="cursor:pointer" onclick="showPage('equipamentos')"><div class="kpi-label">Sem Patrimônio</div><div class="kpi-value" id="kpi-sempat">0</div><div class="kpi-sub">equipamentos sem nº</div></div>` : '';
+
   setContent(`
     <div class="dash-wrap">
       <div class="dash-kpi-grid">
@@ -813,6 +947,7 @@ async function renderDashboard() {
         <div class="dash-kpi kpi-orange"><div class="kpi-label">Em Manutenção</div><div class="kpi-value" id="kpi-manut">0</div><div class="kpi-sub">equipamentos</div></div>
         <div class="dash-kpi kpi-red"><div class="kpi-label">Inativos</div><div class="kpi-value" id="kpi-inativo">0</div><div class="kpi-sub">Aguardando descarte/reparo</div></div>
         <div class="dash-kpi kpi-gray"><div class="kpi-label">Chamados Abertos</div><div class="kpi-value" id="kpi-pendentes">0</div><div class="kpi-sub">em aberto</div></div>
+        ${semPatHTML}
       </div>
       <div class="dash-charts">
         <div class="dash-chart-box"><div class="chart-title">Status dos Equipamentos</div><canvas id="chart-rosca"></canvas></div>
@@ -820,6 +955,15 @@ async function renderDashboard() {
       </div>
       <div class="dash-charts">
         <div class="dash-chart-box dash-chart-full"><div class="chart-title">Manutenções por Mês</div><canvas id="chart-linha"></canvas></div>
+      </div>
+      <div class="dash-charts" style="margin-top:0">
+        <div class="dash-chart-box dash-chart-full" style="background:var(--bg2);border:1px solid var(--border)">
+          <div class="chart-title" style="color:var(--text2)">
+            LABS MAIS CRÍTICOS
+            <span style="font-size:11px;color:var(--text2);font-weight:400;text-transform:none">Clique para ver em 3D</span>
+          </div>
+          ${criticalHTML}
+        </div>
       </div>
     </div>`);
 
@@ -829,6 +973,7 @@ async function renderDashboard() {
     animateCounter(document.getElementById('kpi-manut'), em_manut);
     animateCounter(document.getElementById('kpi-inativo'), inativos);
     animateCounter(document.getElementById('kpi-pendentes'), pendentes);
+    if (sem_pat > 0) animateCounter(document.getElementById('kpi-sempat'), sem_pat);
     setTimeout(() => { const b=document.getElementById('kpi-bar'); if(b) b.style.width=pct+'%'; }, 100);
   }, 50);
 
@@ -853,7 +998,7 @@ async function renderPredios() {
   const { data: predios } = await db.from('vw_predio_resumo').select('*');
   if (isAdmin()) document.getElementById('topbar-actions').innerHTML = `<button class="btn btn-red" onclick="modalNovoPredio()">＋ Novo Prédio</button>`;
   const rows = (predios||[]).map(p => `<tr><td>${predioBadge(p.nome,p.cor)}</td><td class="td-mono">${p.total_labs}</td><td class="td-mono">${p.total_equipamentos}</td><td>${p.operacionais?`<span class="badge badge-green">${p.operacionais} op.</span>`:'—'}</td><td>${p.em_manutencao?`<span class="badge badge-orange">${p.em_manutencao}</span>`:'—'}</td>${isAdmin()?`<td class="actions-cell"><button class="btn btn-ghost btn-sm" onclick="modalEditPredio('${p.id}','${p.nome}','${p.cor}')">✏️ Editar</button></td>`:'<td></td>'}</tr>`).join('');
-  setContent(`<div class="section-header"><div><div class="section-title">Prédios</div><div class="section-sub">Visão geral por prédio</div></div></div><div class="table-card"><div class="table-wrap"><table><thead><tr><th>Prédio</th><th>Labs</th><th>Equipamentos</th><th>Operacionais</th><th>Manutenção</th><th></th></tr></thead><tbody>${rows||'<tr><td colspan="6"><div class="empty">Nenhum prédio.</div></td></tr>'}</tbody></table></div></div>`);
+  setContent(`<div class="section-header"><div><div class="section-title">Prédios</div><div class="section-sub">Visão geral por prédio</div></div></div><div class="table-card"><div class="table-wrap"><table><thead><tr><th>Prédio</th><th>Labs</th><th>Equipamentos</th><th>Operacionais</th><th>Manutenção</th><th></th></tr></thead><tbody>${rows||'<tr><td colspan="6"><div class="empty">Nenhum prédio cadastrado.<br><br><button class="btn btn-red btn-sm" onclick="modalNovoPredio()">＋ Novo Prédio</button></div></td></tr>'}</tbody></table></div></div>`);
 }
 
 function modalNovoPredio() {
@@ -892,7 +1037,7 @@ async function renderLaboratorios(predioFilter=null) {
     const pctCls = pct>80?'pf-green':pct>50?'pf-orange':'pf-red';
     return `<tr><td><strong>${l.numero}</strong></td><td>${l.nome}</td><td>${predioBadge(l.predio,l.predio_cor)}</td><td class="td-mono">${l.andar}º</td><td><span class="badge badge-blue">${l.tipo||'—'}</span></td><td class="td-mono">${l.total_maquinas||0}</td><td><div style="display:flex;align-items:center;gap:8px"><span style="font-size:12px">${pct}%</span><div class="progress-bar" style="width:80px"><div class="progress-fill ${pctCls}" style="width:${pct}%"></div></div></div></td><td>${l.em_manutencao>0?`<span class="badge badge-orange">${l.em_manutencao}</span>`:'—'}</td><td class="actions-cell"><button class="btn btn-ghost btn-sm" onclick="verLab('${l.id}')">Ver</button>${canEdit()?`<button class="btn btn-ghost btn-sm" onclick="modalEditLab('${l.id}')">✏️</button>`:''}${canEdit()?`<button class="btn btn-ghost btn-sm" onclick="goto3dLab('${l.id}')">🧊</button>`:''}</td></tr>`;
   }).join('');
-  setContent(`<div class="section-header"><div><div class="section-title">Laboratórios</div><div class="section-sub">${allLabs.length} ambientes</div></div></div><div class="filter-bar"><select onchange="renderLaboratorios(this.value||null)"><option value="">Todos os prédios</option>${filterOptions}</select></div><div class="table-card"><div class="table-wrap"><table><thead><tr><th>Nº</th><th>Nome</th><th>Prédio</th><th>Andar</th><th>Tipo</th><th>Máquinas</th><th>Disponibilidade</th><th>Manut.</th><th></th></tr></thead><tbody>${rows||'<tr><td colspan="9"><div class="empty">Nenhum laboratório.</div></td></tr>'}</tbody></table></div></div>`);
+  setContent(`<div class="section-header"><div><div class="section-title">Laboratórios</div><div class="section-sub">${allLabs.length} ambientes</div></div></div><div class="filter-bar"><select onchange="renderLaboratorios(this.value||null)"><option value="">Todos os prédios</option>${filterOptions}</select></div><div class="table-card"><div class="table-wrap"><table><thead><tr><th>Nº</th><th>Nome</th><th>Prédio</th><th>Andar</th><th>Tipo</th><th>Máquinas</th><th>Disponibilidade</th><th>Manut.</th><th></th></tr></thead><tbody>${rows||'<tr><td colspan="9"><div class="empty">Nenhum laboratório cadastrado.<br><br><button class="btn btn-red btn-sm" onclick="modalNovoLab()">＋ Novo Lab</button></div></td></tr>'}</tbody></table></div></div>`);
 }
 
 function goto3dLab(labId) {
@@ -904,7 +1049,9 @@ async function verLab(id) {
   const { data: lab } = await db.from('vw_lab_resumo').select('*').eq('id', id).single();
   const { data: equips } = await db.from('equipamentos').select('*').eq('laboratorio_id', id);
   const { data: sws } = await db.from('softwares').select('*').eq('laboratorio_id', id);
-  const eRows = (equips||[]).map(e=>`<tr><td>${e.tipo}</td><td>${e.marca||'—'} ${e.modelo||''}</td><td class="td-mono">${e.patrimonio||'—'}</td><td>${statusBadge(e.status)}</td><td><button class="btn btn-ghost btn-sm" onclick="showQR('${e.id}','${e.patrimonio||e.id}')">QR</button></td></tr>`).join('');
+  // FIX: Histórico de manutenções no detalhe do lab
+  const { data: mauts } = await db.from('manutencoes').select('*,equipamentos(tipo,marca,modelo)').eq('equipamentos.laboratorio_id', id).order('aberto_em', {ascending:false}).limit(5);
+  const eRows = (equips||[]).map(e=>`<tr class="${!e.patrimonio?'row-sem-pat':''}"><td>${e.tipo}</td><td>${e.marca||'—'} ${e.modelo||''}</td><td class="td-mono">${e.patrimonio?e.patrimonio:`<span class="pat-missing">s/ pat.</span>`}</td><td>${statusBadge(e.status)}</td><td><button class="btn btn-ghost btn-sm" onclick="showQR('${e.id}','${e.patrimonio||e.id}')">QR</button></td></tr>`).join('');
   const swRows = (sws||[]).map(s=>`<tr><td>${s.nome}</td><td>${s.versao||'—'}</td><td><span class="badge badge-blue">${s.licenca||'—'}</span></td></tr>`).join('');
   openModal(`Lab ${lab?.numero} · ${lab?.nome}`, `<div class="detail-grid" style="margin-bottom:20px"><div class="detail-item"><div class="di-label">Prédio</div><div class="di-value">${predioBadge(lab?.predio||'—',lab?.predio_cor||'#666')}</div></div><div class="detail-item"><div class="di-label">Andar</div><div class="di-value">${lab?.andar}º</div></div><div class="detail-item"><div class="di-label">Capacidade</div><div class="di-value">${lab?.capacidade}</div></div><div class="detail-item"><div class="di-label">Responsável</div><div class="di-value">${lab?.responsavel||'—'}</div></div></div>${eRows?`<h4 style="margin-bottom:10px;font-size:13px;color:var(--text2)">EQUIPAMENTOS</h4><div class="table-wrap"><table><thead><tr><th>Tipo</th><th>Marca/Modelo</th><th>Patrimônio</th><th>Status</th><th></th></tr></thead><tbody>${eRows}</tbody></table></div>`:''}${swRows?`<h4 style="margin:16px 0 10px;font-size:13px;color:var(--text2)">SOFTWARES</h4><div class="table-wrap"><table><thead><tr><th>Nome</th><th>Versão</th><th>Licença</th></tr></thead><tbody>${swRows}</tbody></table></div>`:''}`,`<button class="btn btn-ghost" onclick="closeModal()">Fechar</button><button class="btn btn-ghost" onclick="closeModal();goto3dLab('${id}')">🧊 Ver 3D</button>`);
 }
@@ -933,41 +1080,119 @@ async function updateLab(id){
 }
 
 // ============================================================
-// EQUIPAMENTOS
+// EQUIPAMENTOS — com filtro por lab/prédio, paginação, sem patrimônio
 // ============================================================
 let equipData = [];
+let equipDataFull = [];
+
 async function renderEquipamentos() {
   setLoading();
+  equipPage = 0;
   const [{data:equips},{data:labs},{data:predios}]=await Promise.all([
     db.from('equipamentos').select(`*, laboratorios(nome,numero,predio_id,predios(nome,cor))`).order('criado_em',{ascending:false}),
     db.from('laboratorios').select('*').order('numero'),
     db.from('predios').select('*')
   ]);
+  equipDataFull = equips||[];
   equipData = equips||[];
+
+  const labOpts = (labs||[]).map(l=>`<option value="${l.id}">${l.numero} · ${l.nome}</option>`).join('');
+  const predioOpts = (predios||[]).map(p=>`<option value="${p.id}">${p.nome}</option>`).join('');
+  const sem_pat_count = equipData.filter(e=>!e.patrimonio).length;
+
   if (canEdit()) document.getElementById('topbar-actions').innerHTML = `<button class="btn btn-ghost btn-sm" onclick="exportCSV(equipData,'equipamentos.csv')">⬇ CSV</button><button class="btn btn-red" onclick="modalNovoEquip()">＋ Equipamento</button>`;
-  renderEquipTable(equipData);
+
+  const content = document.getElementById('page-content');
+  content.innerHTML = `
+    <div class="section-header">
+      <div><div class="section-title">Equipamentos</div><div class="section-sub" id="equip-count-sub">${equipData.length} registros</div></div>
+    </div>
+    <div class="filter-bar">
+      <div class="search-bar"><input id="equip-search" placeholder="Buscar..." oninput="filterEquip()"/></div>
+      <select id="equip-status-filter" onchange="filterEquip()"><option value="">Todos os status</option><option value="operacional">Operacional</option><option value="manutencao">Manutenção</option><option value="inativo">Inativo</option><option value="extraviado">Extraviado</option></select>
+      <select id="equip-tipo-filter" onchange="filterEquip()"><option value="">Todos os tipos</option>${['computador','notebook','chromebook','monitor','projetor','amplificador','microfone','switch','roteador','nobreak','impressora','outro'].map(t=>`<option value="${t}">${t}</option>`).join('')}</select>
+      <select id="equip-lab-filter" onchange="filterEquip()"><option value="">Todos os labs</option>${labOpts}</select>
+      <select id="equip-predio-filter" onchange="filterEquip()"><option value="">Todos os prédios</option>${predioOpts}</select>
+      ${sem_pat_count>0?`<button class="btn btn-ghost btn-sm" id="btn-sempat-filter" onclick="toggleSemPatFilter()" title="${sem_pat_count} sem patrimônio">⚠ Sem pat. (${sem_pat_count})</button>`:''}
+    </div>
+    <div class="table-card">
+      <div class="table-wrap"><table><thead><tr><th>Tipo</th><th>Marca/Modelo</th><th>Patrimônio</th><th>Série</th><th>Lab</th><th>Prédio</th><th>Status</th><th>Ações</th></tr></thead><tbody id="equip-tbody"></tbody></table></div>
+      <div id="equip-pagination"></div>
+    </div>`;
+
+  renderEquipPage();
 }
 
-function renderEquipTable(data) {
-  const content=document.getElementById('page-content');
-  if(!content)return;
-  const rows=data.map(e=>{const lab=e.laboratorios,predio=lab?.predios;return`<tr id="equip-${e.id}"><td><strong>${e.tipo}</strong></td><td>${e.marca||'—'} ${e.modelo||''}</td><td class="td-mono">${e.patrimonio||'—'}</td><td class="td-mono">${e.numero_serie||'—'}</td><td>${lab?`${lab.numero} · ${lab.nome}`:'—'}</td><td>${predio?predioBadge(predio.nome,predio.cor):'—'}</td><td>${statusBadge(e.status)}</td><td class="actions-cell"><button class="btn btn-ghost btn-sm" onclick="showQR('${e.id}','${e.patrimonio||e.id}')">QR</button>${canEdit()?`<button class="btn btn-ghost btn-sm" onclick="modalEditEquip('${e.id}')">✏️</button><button class="btn btn-ghost btn-sm" onclick="modalNovaManut('${e.id}')">🔧</button>`:''}</td></tr>`;}).join('');
-  content.innerHTML=`<div class="section-header"><div><div class="section-title">Equipamentos</div><div class="section-sub">${data.length} registros</div></div></div><div class="filter-bar"><div class="search-bar"><input id="equip-search" placeholder="Buscar..." oninput="filterEquip()"/></div><select id="equip-status-filter" onchange="filterEquip()"><option value="">Todos os status</option><option value="operacional">Operacional</option><option value="manutencao">Manutenção</option><option value="inativo">Inativo</option><option value="extraviado">Extraviado</option></select><select id="equip-tipo-filter" onchange="filterEquip()"><option value="">Todos os tipos</option>${['computador','notebook','chromebook','monitor','projetor','amplificador','microfone','switch','roteador','nobreak','impressora','outro'].map(t=>`<option value="${t}">${t}</option>`).join('')}</select></div><div class="table-card"><div class="table-wrap"><table><thead><tr><th>Tipo</th><th>Marca/Modelo</th><th>Patrimônio</th><th>Série</th><th>Lab</th><th>Prédio</th><th>Status</th><th>Ações</th></tr></thead><tbody id="equip-tbody">${rows||'<tr><td colspan="8"><div class="empty">Nenhum equipamento.</div></td></tr>'}</tbody></table></div></div>`;
+let _filterSemPat = false;
+function toggleSemPatFilter() {
+  _filterSemPat = !_filterSemPat;
+  document.getElementById('btn-sempat-filter')?.classList.toggle('btn-active', _filterSemPat);
+  filterEquip();
 }
 
 function filterEquip() {
   const q=document.getElementById('equip-search')?.value.toLowerCase()||'';
   const st=document.getElementById('equip-status-filter')?.value||'';
   const tp=document.getElementById('equip-tipo-filter')?.value||'';
-  const filtered=equipData.filter(e=>{const txt=`${e.tipo} ${e.marca||''} ${e.modelo||''} ${e.patrimonio||''} ${e.numero_serie||''}`.toLowerCase();return(!q||txt.includes(q))&&(!st||e.status===st)&&(!tp||e.tipo===tp);});
-  const rows=filtered.map(e=>{const lab=e.laboratorios,predio=lab?.predios;return`<tr id="equip-${e.id}"><td><strong>${e.tipo}</strong></td><td>${e.marca||'—'} ${e.modelo||''}</td><td class="td-mono">${e.patrimonio||'—'}</td><td class="td-mono">${e.numero_serie||'—'}</td><td>${lab?`${lab.numero} · ${lab.nome}`:'—'}</td><td>${predio?predioBadge(predio.nome,predio.cor):'—'}</td><td>${statusBadge(e.status)}</td><td class="actions-cell"><button class="btn btn-ghost btn-sm" onclick="showQR('${e.id}','${e.patrimonio||e.id}')">QR</button>${canEdit()?`<button class="btn btn-ghost btn-sm" onclick="modalEditEquip('${e.id}')">✏️</button><button class="btn btn-ghost btn-sm" onclick="modalNovaManut('${e.id}')">🔧</button>`:''}</td></tr>`;}).join('');
+  const lb=document.getElementById('equip-lab-filter')?.value||'';
+  const pr=document.getElementById('equip-predio-filter')?.value||'';
+  equipData = equipDataFull.filter(e=>{
+    const txt=`${e.tipo} ${e.marca||''} ${e.modelo||''} ${e.patrimonio||''} ${e.numero_serie||''}`.toLowerCase();
+    const labMatch = !lb || e.laboratorio_id===lb;
+    const predioMatch = !pr || e.laboratorios?.predio_id===pr;
+    const semPat = !_filterSemPat || !e.patrimonio;
+    return(!q||txt.includes(q))&&(!st||e.status===st)&&(!tp||e.tipo===tp)&&labMatch&&predioMatch&&semPat;
+  });
+  equipPage = 0;
+  const sub = document.getElementById('equip-count-sub');
+  if(sub) sub.textContent = `${equipData.length} registros`;
+  renderEquipPage();
+}
+
+function changeEquipPage(p) {
+  equipPage = p;
+  renderEquipPage();
+  document.querySelector('.table-card')?.scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+function renderEquipPage() {
   const tbody=document.getElementById('equip-tbody');
-  if(tbody)tbody.innerHTML=rows||'<tr><td colspan="8"><div class="empty">Nenhum resultado.</div></td></tr>';
+  const pgEl=document.getElementById('equip-pagination');
+  if(!tbody)return;
+  const pageData = equipData.slice(equipPage*PAGE_SIZE, (equipPage+1)*PAGE_SIZE);
+  const rows=pageData.map(e=>{const lab=e.laboratorios,predio=lab?.predios;return`<tr id="equip-${e.id}" class="${!e.patrimonio?'row-sem-pat':''}"><td><strong>${e.tipo}</strong></td><td>${e.marca||'—'} ${e.modelo||''}</td><td class="td-mono">${e.patrimonio?e.patrimonio:`<span class="pat-missing">s/ pat.</span>`}</td><td class="td-mono">${e.numero_serie||'—'}</td><td>${lab?`${lab.numero} · ${lab.nome}`:'—'}</td><td>${predio?predioBadge(predio.nome,predio.cor):'—'}</td><td>${statusBadge(e.status)}</td><td class="actions-cell"><button class="btn btn-ghost btn-sm" onclick="showQR('${e.id}','${e.patrimonio||e.id}')">QR</button>${canEdit()?`<button class="btn btn-ghost btn-sm" onclick="modalEditEquip('${e.id}')">✏️</button><button class="btn btn-ghost btn-sm" onclick="modalNovaManut('${e.id}')">🔧</button>`:''}<button class="btn btn-ghost btn-sm" onclick="verHistoricoEquip('${e.id}')">📋</button></td></tr>`;}).join('');
+  tbody.innerHTML=rows||'<tr><td colspan="8"><div class="empty-state"><div class="es-icon">💻</div><h3>Nenhum equipamento</h3><p>Ajuste os filtros ou cadastre um novo</p>'+( canEdit()?'<br><button class="btn btn-red btn-sm" style="margin-top:12px" onclick="modalNovoEquip()">＋ Novo Equipamento</button>':'' )+'</div></td></tr>';
+  if(pgEl) pgEl.innerHTML = buildPagination(equipData.length, equipPage, 'changeEquipPage', 'equip-pagination');
 }
 
 async function refreshEquipamentos(){
   const {data:equips}=await db.from('equipamentos').select(`*, laboratorios(nome,numero,predio_id,predios(nome,cor))`).order('criado_em',{ascending:false});
-  equipData=equips||[];filterEquip();
+  equipDataFull=equips||[];
+  filterEquip();
+}
+
+// FIX #5: Histórico de manutenções por equipamento
+async function verHistoricoEquip(id) {
+  const [{data:e},{data:hist}] = await Promise.all([
+    db.from('equipamentos').select('tipo,marca,modelo,patrimonio').eq('id',id).single(),
+    db.from('manutencoes').select('*').eq('equipamento_id',id).order('aberto_em',{ascending:false})
+  ]);
+  const histHTML = (hist||[]).length ? (hist||[]).map(m=>`
+    <div class="hist-item ${m.status}">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div class="hist-title">${m.titulo}</div>
+        ${manutBadge(m.status)}
+      </div>
+      <div class="hist-meta">
+        <span>${prioridadeBadge(m.prioridade)}</span>
+        <span>Aberto: ${new Date(m.aberto_em).toLocaleDateString('pt-BR')}</span>
+        ${m.resolvido_em?`<span style="color:var(--green)">✓ Resolvido: ${new Date(m.resolvido_em).toLocaleDateString('pt-BR')}</span>`:''}
+      </div>
+      ${m.descricao?`<p style="font-size:12px;color:var(--text2);margin-top:6px">${m.descricao}</p>`:''}
+    </div>`).join('') : '<p style="color:var(--text2);font-size:13px;padding:12px 0">Nenhuma manutenção registrada.</p>';
+  openModal(`Histórico · ${e?.tipo||''} ${e?.marca||''} ${e?.modelo||''} ${e?.patrimonio?'('+e.patrimonio+')':''}`,
+    `<div class="hist-list">${histHTML}</div>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Fechar</button>${canEdit()?`<button class="btn btn-red" onclick="closeModal();modalNovaManut('${id}')">＋ Novo Chamado</button>`:''}`);
 }
 
 async function modalNovoEquip(){
@@ -1001,33 +1226,55 @@ async function deleteEquip(id){
 }
 
 // ============================================================
-// MANUTENÇÕES
+// MANUTENÇÕES — com paginação
 // ============================================================
 let manutData = [];
+let manutDataFull = [];
+
 async function renderManutencoes(){
   setLoading();
+  manutPage = 0;
   const {data:manut}=await db.from('manutencoes').select(`*, equipamentos(tipo,marca,modelo,patrimonio,laboratorio_id,laboratorios(numero,nome))`).order('aberto_em',{ascending:false});
+  manutDataFull=manut||[];
   manutData=manut||[];
   if(canEdit())document.getElementById('topbar-actions').innerHTML=`<button class="btn btn-ghost btn-sm" onclick="exportCSV(manutData,'manutencoes.csv')">⬇ CSV</button><button class="btn btn-red" onclick="modalNovaManutLivre()">＋ Chamado</button>`;
-  renderManutTable(manutData);
-}
-function renderManutTable(data){
-  const rows=data.map(m=>{const e=m.equipamentos;return`<tr><td><strong>${m.titulo}</strong></td><td>${e?`${e.tipo} · ${e.marca||''} ${e.modelo||''}`:'—'}</td><td>${e?.laboratorios?`${e.laboratorios.numero} · ${e.laboratorios.nome}`:'—'}</td><td>${manutBadge(m.status)}</td><td>${prioridadeBadge(m.prioridade)}</td><td class="td-mono">${new Date(m.aberto_em).toLocaleDateString('pt-BR')}</td><td>${m.resolvido_em?`<span style="font-size:11px;color:var(--green)">✓ ${new Date(m.resolvido_em).toLocaleDateString('pt-BR')}</span>`:'—'}</td>${canEdit()?`<td><button class="btn btn-ghost btn-sm" onclick="modalEditManut('${m.id}')">✏️</button></td>`:'<td></td>'}</tr>`;}).join('');
   const content=document.getElementById('page-content');
-  const abertos=data.filter(m=>m.status!=='resolvido').length;
-  content.innerHTML=`<div class="section-header"><div><div class="section-title">Manutenções</div><div class="section-sub">${abertos} abertos · ${data.length} total</div></div></div><div class="filter-bar"><div class="search-bar"><input id="manut-search" placeholder="Buscar..." oninput="filterManut()"/></div><select id="manut-status-filter" onchange="filterManut()"><option value="">Todos</option><option value="aberto">Aberto</option><option value="em_andamento">Em Andamento</option><option value="resolvido">Resolvido</option></select><select id="manut-prio-filter" onchange="filterManut()"><option value="">Prioridades</option><option value="critica">Crítica</option><option value="alta">Alta</option><option value="media">Média</option><option value="baixa">Baixa</option></select></div><div class="table-card"><div class="table-wrap"><table><thead><tr><th>Título</th><th>Equipamento</th><th>Lab</th><th>Status</th><th>Prioridade</th><th>Aberto</th><th>Resolvido</th><th></th></tr></thead><tbody id="manut-tbody">${rows||'<tr><td colspan="8"><div class="empty">Nenhum chamado.</div></td></tr>'}</tbody></table></div></div>`;
+  const abertos=manutData.filter(m=>m.status!=='resolvido').length;
+  content.innerHTML=`<div class="section-header"><div><div class="section-title">Manutenções</div><div class="section-sub" id="manut-count-sub">${abertos} abertos · ${manutData.length} total</div></div></div><div class="filter-bar"><div class="search-bar"><input id="manut-search" placeholder="Buscar..." oninput="filterManut()"/></div><select id="manut-status-filter" onchange="filterManut()"><option value="">Todos</option><option value="aberto">Aberto</option><option value="em_andamento">Em Andamento</option><option value="resolvido">Resolvido</option></select><select id="manut-prio-filter" onchange="filterManut()"><option value="">Prioridades</option><option value="critica">Crítica</option><option value="alta">Alta</option><option value="media">Média</option><option value="baixa">Baixa</option></select></div><div class="table-card"><div class="table-wrap"><table><thead><tr><th>Título</th><th>Equipamento</th><th>Lab</th><th>Status</th><th>Prioridade</th><th>Aberto</th><th>Resolvido</th><th></th></tr></thead><tbody id="manut-tbody"></tbody></table></div><div id="manut-pagination"></div></div>`;
+  renderManutPage();
 }
+
 function filterManut(){
   const q=document.getElementById('manut-search')?.value.toLowerCase()||'',st=document.getElementById('manut-status-filter')?.value||'',pr=document.getElementById('manut-prio-filter')?.value||'';
-  const filtered=manutData.filter(m=>{const txt=`${m.titulo} ${m.descricao||''}`.toLowerCase();return(!q||txt.includes(q))&&(!st||m.status===st)&&(!pr||m.prioridade===pr);});
-  const rows=filtered.map(m=>{const e=m.equipamentos;return`<tr><td><strong>${m.titulo}</strong></td><td>${e?`${e.tipo} · ${e.marca||''} ${e.modelo||''}`:'—'}</td><td>${e?.laboratorios?`${e.laboratorios.numero} · ${e.laboratorios.nome}`:'—'}</td><td>${manutBadge(m.status)}</td><td>${prioridadeBadge(m.prioridade)}</td><td class="td-mono">${new Date(m.aberto_em).toLocaleDateString('pt-BR')}</td><td>${m.resolvido_em?`<span style="font-size:11px;color:var(--green)">✓ ${new Date(m.resolvido_em).toLocaleDateString('pt-BR')}</span>`:'—'}</td>${canEdit()?`<td><button class="btn btn-ghost btn-sm" onclick="modalEditManut('${m.id}')">✏️</button></td>`:'<td></td>'}</tr>`;}).join('');
-  const tbody=document.getElementById('manut-tbody');
-  if(tbody)tbody.innerHTML=rows||'<tr><td colspan="8"><div class="empty">Sem resultados.</div></td></tr>';
+  manutData=manutDataFull.filter(m=>{const txt=`${m.titulo} ${m.descricao||''}`.toLowerCase();return(!q||txt.includes(q))&&(!st||m.status===st)&&(!pr||m.prioridade===pr);});
+  manutPage=0;
+  const sub=document.getElementById('manut-count-sub');
+  if(sub){const ab=manutData.filter(m=>m.status!=='resolvido').length;sub.textContent=`${ab} abertos · ${manutData.length} total`;}
+  renderManutPage();
 }
+
+function changeManutPage(p) {
+  manutPage=p;
+  renderManutPage();
+  document.querySelector('.table-card')?.scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+function renderManutPage() {
+  const tbody=document.getElementById('manut-tbody');
+  const pgEl=document.getElementById('manut-pagination');
+  if(!tbody)return;
+  const pageData=manutData.slice(manutPage*PAGE_SIZE,(manutPage+1)*PAGE_SIZE);
+  const rows=pageData.map(m=>{const e=m.equipamentos;return`<tr><td><strong>${m.titulo}</strong></td><td>${e?`${e.tipo} · ${e.marca||''} ${e.modelo||''}`:'—'}</td><td>${e?.laboratorios?`${e.laboratorios.numero} · ${e.laboratorios.nome}`:'—'}</td><td>${manutBadge(m.status)}</td><td>${prioridadeBadge(m.prioridade)}</td><td class="td-mono">${new Date(m.aberto_em).toLocaleDateString('pt-BR')}</td><td>${m.resolvido_em?`<span style="font-size:11px;color:var(--green)">✓ ${new Date(m.resolvido_em).toLocaleDateString('pt-BR')}</span>`:'—'}</td>${canEdit()?`<td><button class="btn btn-ghost btn-sm" onclick="modalEditManut('${m.id}')">✏️</button></td>`:'<td></td>'}</tr>`;}).join('');
+  tbody.innerHTML=rows||'<tr><td colspan="8"><div class="empty-state"><div class="es-icon">🔧</div><h3>Nenhum chamado</h3><p>Ajuste os filtros ou abra um novo chamado</p>'+(canEdit()?'<br><button class="btn btn-red btn-sm" style="margin-top:12px" onclick="modalNovaManutLivre()">＋ Novo Chamado</button>':'')+'</div></td></tr>';
+  if(pgEl) pgEl.innerHTML = buildPagination(manutData.length, manutPage, 'changeManutPage', 'manut-pagination');
+}
+
 async function refreshManutencoes(){
   const {data:manut}=await db.from('manutencoes').select(`*, equipamentos(tipo,marca,modelo,patrimonio,laboratorio_id,laboratorios(numero,nome))`).order('aberto_em',{ascending:false});
-  manutData=manut||[];filterManut();
+  manutDataFull=manut||[];
+  filterManut();
 }
+
 async function modalNovaManut(equipId){
   const {data:e}=await db.from('equipamentos').select('tipo,marca,modelo,patrimonio').eq('id',equipId).single();
   openModal(`Novo Chamado · ${e?.tipo||''} ${e?.marca||''} ${e?.modelo||''}`,`<div class="form-field"><label>Título *</label><input id="nm-titulo" placeholder="Descreva o problema..."/></div><div class="form-field"><label>Descrição</label><textarea id="nm-desc"></textarea></div><div class="form-row"><div class="form-field"><label>Prioridade</label><select id="nm-prio"><option value="baixa">Baixa</option><option value="media" selected>Média</option><option value="alta">Alta</option><option value="critica">Crítica</option></select></div><div class="form-field"><label>Status</label><select id="nm-status"><option value="aberto" selected>Aberto</option><option value="em_andamento">Em Andamento</option></select></div></div>`,`<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-red" onclick="saveManut('${equipId}')">Abrir Chamado</button>`);
@@ -1070,7 +1317,7 @@ async function renderSoftwares(){
   const {data:sws}=await db.from('softwares').select(`*, laboratorios(nome,numero)`).order('nome');
   if(canEdit())document.getElementById('topbar-actions').innerHTML=`<button class="btn btn-red" onclick="modalNovoSw()">＋ Software</button>`;
   const rows=(sws||[]).map(s=>`<tr><td><strong>${s.nome}</strong></td><td class="td-mono">${s.versao||'—'}</td><td><span class="badge badge-blue">${s.licenca||'—'}</span></td><td>${s.laboratorios?`${s.laboratorios.numero} · ${s.laboratorios.nome}`:'—'}</td>${canEdit()?`<td><button class="btn btn-ghost btn-sm" onclick="deleteSw('${s.id}')">🗑</button></td>`:'<td></td>'}</tr>`).join('');
-  setContent(`<div class="section-header"><div><div class="section-title">Softwares</div><div class="section-sub">${sws?.length||0} registros</div></div></div><div class="table-card"><div class="table-wrap"><table><thead><tr><th>Nome</th><th>Versão</th><th>Licença</th><th>Laboratório</th><th></th></tr></thead><tbody>${rows||'<tr><td colspan="5"><div class="empty">Nenhum software.</div></td></tr>'}</tbody></table></div></div>`);
+  setContent(`<div class="section-header"><div><div class="section-title">Softwares</div><div class="section-sub">${sws?.length||0} registros</div></div></div><div class="table-card"><div class="table-wrap"><table><thead><tr><th>Nome</th><th>Versão</th><th>Licença</th><th>Laboratório</th><th></th></tr></thead><tbody>${rows||'<tr><td colspan="5"><div class="empty-state"><div class="es-icon">📦</div><h3>Nenhum software</h3><p>Cadastre softwares por laboratório</p>'+(canEdit()?'<br><button class="btn btn-red btn-sm" style="margin-top:12px" onclick="modalNovoSw()">＋ Novo Software</button>':'')+'</div></td></tr>'}</tbody></table></div></div>`);
 }
 async function modalNovoSw(){
   const {data:labs}=await db.from('laboratorios').select('*').order('numero');
@@ -1115,7 +1362,7 @@ async function updateUser(id){
 }
 
 // ============================================================
-// RELATÓRIOS
+// RELATÓRIOS — FIX: exportCSV seguro, sem bug de encodeURIComponent
 // ============================================================
 async function renderRelatorios(){
   setLoading();
@@ -1127,23 +1374,48 @@ async function renderRelatorios(){
   const byStatus={},byTipo={};
   (equips||[]).forEach(e=>{byStatus[e.status]=(byStatus[e.status]||0)+1;byTipo[e.tipo]=(byTipo[e.tipo]||0)+1;});
   const manutPend=(manut||[]).filter(m=>m.status!=='resolvido').length,manutRes=(manut||[]).filter(m=>m.status==='resolvido').length;
+  const semPat=(equips||[]).filter(e=>!e.patrimonio).length;
   const statusRows=Object.entries(byStatus).map(([k,v])=>`<tr><td>${k}</td><td class="td-mono">${v}</td><td>${Math.round(v/(equips?.length||1)*100)}%</td></tr>`).join('');
   const tipoRows=Object.entries(byTipo).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<tr><td>${k}</td><td class="td-mono">${v}</td></tr>`).join('');
-  setContent(`<div class="section-header"><div><div class="section-title">Relatórios</div><div class="section-sub">Visão analítica</div></div></div><div class="stat-grid" style="margin-bottom:24px"><div class="stat-card blue"><div class="label">Total Equip.</div><div class="value">${equips?.length||0}</div></div><div class="stat-card green"><div class="label">Operacionais</div><div class="value">${byStatus['operacional']||0}</div></div><div class="stat-card orange"><div class="label">Chamados Abertos</div><div class="value">${manutPend}</div></div><div class="stat-card"><div class="label">Resolvidos</div><div class="value">${manutRes}</div></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:20px"><div class="table-card"><div class="table-header"><span class="table-title">Por Status</span></div><div class="table-wrap"><table><thead><tr><th>Status</th><th>Qtd</th><th>%</th></tr></thead><tbody>${statusRows}</tbody></table></div></div><div class="table-card"><div class="table-header"><span class="table-title">Por Tipo</span></div><div class="table-wrap"><table><thead><tr><th>Tipo</th><th>Qtd</th></tr></thead><tbody>${tipoRows}</tbody></table></div></div></div><div class="table-card" style="margin-top:20px"><div class="table-header"><span class="table-title">Por Laboratório</span></div><div class="table-wrap"><table><thead><tr><th>Lab</th><th>Prédio</th><th>Máquinas</th><th>Disponíveis</th><th>Manut.</th><th>Softwares</th></tr></thead><tbody>${(labs||[]).map(l=>`<tr><td>${l.numero} · ${l.nome}</td><td>${predioBadge(l.predio||'—',l.predio_cor||'#666')}</td><td class="td-mono">${l.total_maquinas||0}</td><td><span class="badge badge-green">${l.maquinas_ok||0}</span></td><td>${l.em_manutencao>0?`<span class="badge badge-orange">${l.em_manutencao}</span>`:'—'}</td><td class="td-mono">${l.total_softwares||0}</td></tr>`).join('')}</tbody></table></div></div><div style="margin-top:12px;text-align:right"><button class="btn btn-green" onclick="exportRelatorio()">⬇ Exportar CSV Completo</button></div>`);
+
+  document.getElementById('topbar-actions').innerHTML = `<button class="btn btn-green" onclick="exportRelatorio()">⬇ Exportar CSV</button>`;
+
+  setContent(`<div class="section-header"><div><div class="section-title">Relatórios</div><div class="section-sub">Visão analítica</div></div></div>
+    <div class="stat-grid" style="margin-bottom:24px">
+      <div class="stat-card blue"><div class="label">Total Equip.</div><div class="value">${equips?.length||0}</div></div>
+      <div class="stat-card green"><div class="label">Operacionais</div><div class="value">${byStatus['operacional']||0}</div></div>
+      <div class="stat-card orange"><div class="label">Chamados Abertos</div><div class="value">${manutPend}</div></div>
+      <div class="stat-card"><div class="label">Resolvidos</div><div class="value">${manutRes}</div></div>
+      ${semPat>0?`<div class="stat-card orange"><div class="label">Sem Patrimônio</div><div class="value">${semPat}</div><div class="sub">equipamentos sem nº</div></div>`:''}
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+      <div class="table-card"><div class="table-header"><span class="table-title">Por Status</span></div><div class="table-wrap"><table><thead><tr><th>Status</th><th>Qtd</th><th>%</th></tr></thead><tbody>${statusRows}</tbody></table></div></div>
+      <div class="table-card"><div class="table-header"><span class="table-title">Por Tipo</span></div><div class="table-wrap"><table><thead><tr><th>Tipo</th><th>Qtd</th></tr></thead><tbody>${tipoRows}</tbody></table></div></div>
+    </div>
+    <div class="table-card" style="margin-top:20px">
+      <div class="table-header"><span class="table-title">Por Laboratório</span></div>
+      <div class="table-wrap"><table><thead><tr><th>Lab</th><th>Prédio</th><th>Máquinas</th><th>Disponíveis</th><th>Manut.</th><th>Softwares</th></tr></thead>
+      <tbody>${(labs||[]).map(l=>`<tr><td>${l.numero} · ${l.nome}</td><td>${predioBadge(l.predio||'—',l.predio_cor||'#666')}</td><td class="td-mono">${l.total_maquinas||0}</td><td><span class="badge badge-green">${l.maquinas_ok||0}</span></td><td>${l.em_manutencao>0?`<span class="badge badge-orange">${l.em_manutencao}</span>`:'—'}</td><td class="td-mono">${l.total_softwares||0}</td></tr>`).join('')}</tbody>
+      </table></div>
+    </div>`);
 }
+
+// FIX #1: exportRelatorio — sem encodeURIComponent injetado no HTML
 async function exportRelatorio(){
   const {data}=await db.from('equipamentos').select(`tipo,marca,modelo,patrimonio,numero_serie,processador,ram_gb,armazenamento_gb,sistema_operacional,status,observacao,data_aquisicao, laboratorios(numero,nome,predios:predio_id(nome))`);
-  const flat=(data||[]).map(e=>({tipo:e.tipo,marca:e.marca,modelo:e.modelo,patrimonio:e.patrimonio,numero_serie:e.numero_serie,processador:e.processador,ram_gb:e.ram_gb,hd_gb:e.armazenamento_gb,so:e.sistema_operacional,status:e.status,lab:e.laboratorios?.nome,lab_num:e.laboratorios?.numero,predio:e.laboratorios?.predios?.nome,observacao:e.observacao,data_aquisicao:e.data_aquisicao}));
-  exportCSV(flat,`inventario_nati_${new Date().toISOString().split('T')[0]}.csv`);
+  const flat=(data||[]).map(e=>({
+    tipo:e.tipo, marca:e.marca, modelo:e.modelo, patrimonio:e.patrimonio,
+    numero_serie:e.numero_serie, processador:e.processador, ram_gb:e.ram_gb,
+    hd_gb:e.armazenamento_gb, so:e.sistema_operacional, status:e.status,
+    lab:e.laboratorios?.nome, lab_num:e.laboratorios?.numero,
+    predio:e.laboratorios?.predios?.nome,
+    observacao:e.observacao, data_aquisicao:e.data_aquisicao
+  }));
+  exportCSV(flat, `inventario_nati_${new Date().toISOString().split('T')[0]}.csv`);
 }
 
 // ============================================================
 // ████████╗██████╗     ██╗      █████╗ ██████╗ ███████╗
-// ╚══██╔══╝██╔══██╗    ██║     ██╔══██╗██╔══██╗██╔════╝
-//    ██║   ██║  ██║    ██║     ███████║██████╔╝███████╗
-//    ██║   ██║  ██║    ██║     ██╔══██║██╔══██╗╚════██║
-//    ██║   ██████╔╝    ███████╗██║  ██║██████╔╝███████║
-//    ╚═╝   ╚═════╝     ╚══════╝╚═╝  ╚═╝╚═════╝ ╚══════╝
 // ============================================================
 
 // ─── ISO CONFIG ───
@@ -1152,12 +1424,20 @@ const ISO = {
   toScreen(col, row, zoom=1) {
     return { x:(col-row)*(this.tileW/2)*zoom, y:(col+row)*(this.tileH/2)*zoom };
   },
+  // FIX #4: posição 3D — usa hash de UUID para posição determinística, sem empilhamento
   equipCell(equip, lab) {
     const labW = lab.layout_largura || 10;
-    const idx = parseInt((equip.id||'0').replace(/\D/g,'')) || 0;
-    const px = equip.posicao_x ?? (idx % labW);
-    const py = equip.posicao_y ?? Math.floor(idx / labW);
-    return { col:px, row:py };
+    const labH = lab.layout_altura  || 6;
+    if (equip.posicao_x != null && equip.posicao_y != null) {
+      return { col: equip.posicao_x, row: equip.posicao_y };
+    }
+    // Hash determinístico a partir do UUID para evitar colisões
+    let hash = 0;
+    const id = String(equip.id);
+    for (let i=0; i<id.length; i++) hash = (hash*31 + id.charCodeAt(i)) & 0xFFFFFF;
+    const total = labW * labH;
+    const idx = hash % total;
+    return { col: idx % labW, row: Math.floor(idx / labW) };
   }
 };
 
@@ -1194,7 +1474,7 @@ async function load3dData() {
 // ─── INIT 3D PAGE ───
 async function init3dPage() {
   document.getElementById('topbar-actions').innerHTML = `
-    <div class="search-wrap-3d"><input type="text" id="global-search-3d" placeholder="Buscar patrimônio..." oninput="globalSearch3d(this.value)"/></div>
+    <div class="search-wrap-3d"><input type="text" id="global-search-3d-top" placeholder="Buscar patrimônio..." oninput="globalSearch3d(this.value)"/></div>
     <button class="btn btn-ghost btn-sm" id="btn-3d-mode" onclick="setViewMode3d('3d')">🧊 3D</button>
     <button class="btn btn-ghost btn-sm" id="btn-grid-mode" onclick="setViewMode3d('grid')">⊞ Grade</button>
     <button class="btn btn-red btn-sm" onclick="openAddModal3d()">＋ Equipamento</button>
@@ -1386,21 +1666,16 @@ function draw3dEquip(ctx,equip,col,row,zoom,selected,hovered){
   const stw=tw*shrink,sth=th*shrink,baseY=y+ISO.tileH*zoom*0.15;
   ctx.save();ctx.globalAlpha=alpha;
   if(selected||hovered){ctx.shadowColor=col1;ctx.shadowBlur=selected?20*zoom:10*zoom;}
-  // top
   ctx.beginPath();ctx.moveTo(x,baseY);ctx.lineTo(x+stw,baseY+sth);ctx.lineTo(x,baseY+sth*2);ctx.lineTo(x-stw,baseY+sth);ctx.closePath();
   ctx.fillStyle=lightColor3d(col1,0.7);ctx.fill();
-  // right
   ctx.beginPath();ctx.moveTo(x+stw,baseY+sth);ctx.lineTo(x,baseY+sth*2);ctx.lineTo(x,baseY+sth*2+boxH);ctx.lineTo(x+stw,baseY+sth+boxH);ctx.closePath();
   ctx.fillStyle=darkColor3d(col1,0.5);ctx.fill();
-  // left
   ctx.beginPath();ctx.moveTo(x-stw,baseY+sth);ctx.lineTo(x,baseY+sth*2);ctx.lineTo(x,baseY+sth*2+boxH);ctx.lineTo(x-stw,baseY+sth+boxH);ctx.closePath();
   ctx.fillStyle=darkColor3d(col1,0.35);ctx.fill();
   ctx.strokeStyle=selected?col1:'rgba(255,255,255,0.08)';ctx.lineWidth=selected?1.5*zoom:0.5;
   ctx.beginPath();ctx.moveTo(x,baseY);ctx.lineTo(x+stw,baseY+sth);ctx.lineTo(x,baseY+sth*2);ctx.lineTo(x-stw,baseY+sth);ctx.closePath();ctx.stroke();
   ctx.shadowBlur=0;
-  // status dot
   ctx.beginPath();ctx.arc(x,baseY+sth,4*zoom,0,Math.PI*2);ctx.fillStyle=col1;ctx.fill();
-  // icon
   if(zoom>0.6){ctx.font=`${Math.max(8,10*zoom)}px sans-serif`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(equipIcon3d(equip.tipo),x,baseY+sth);}
   ctx.restore();
 }
@@ -1548,6 +1823,7 @@ function open3dDetail(equip) {
     <div class="dp-actions">
       <button class="btn btn-ghost" onclick="open3dEditStatus('${equip.id}')">🔄 Alterar Status</button>
       ${canEdit()?`<button class="btn btn-ghost" onclick="closeDetail3d();modalNovaManut('${equip.id}')">🔧 Abrir Chamado</button>`:''}
+      <button class="btn btn-ghost" onclick="closeDetail3d();verHistoricoEquip('${equip.id}')">📋 Histórico</button>
       <button class="btn btn-ghost" onclick="showQR('${equip.id}','${equip.patrimonio||equip.id}')">📱 Gerar QR Code</button>
     </div>`;
 
@@ -1603,7 +1879,7 @@ function render3dGrid() {
       <div class="ec-name">${e.marca||''} ${e.modelo||''}</div>
       <div class="ec-pat">${e.patrimonio||'s/patrimônio'}</div>
       <div class="ec-status ${stClass[e.status]||''}">${stLabel[e.status]||e.status}</div>
-    </div>`).join('');
+    </div>`).join('') || '<div style="color:var(--text2);font-size:14px;padding:40px;grid-column:1/-1;text-align:center">Nenhum equipamento neste laboratório.<br><br><button class="btn btn-red btn-sm" onclick="openAddModal3d()">＋ Adicionar</button></div>';
 }
 
 function open3dDetailFromGrid(id) {
@@ -1619,8 +1895,8 @@ function zoomOut3d() { lab3dState.canvas.zoom=Math.max(0.3,lab3dState.canvas.zoo
 function reset3dView() {
   const canvas=document.getElementById('lab-canvas');
   lab3dState.canvas.zoom=1;
-  lab3dState.canvas.offsetX=(canvas?.width||800)/2-300;
-  lab3dState.canvas.offsetY=80;
+  lab3dState.canvas.offsetX=0;
+  lab3dState.canvas.offsetY=0;
 }
 function resetView3d() { reset3dView(); draw3dLab(); }
 
@@ -1631,7 +1907,6 @@ function closeAddModal3d() { document.getElementById('add-modal-3d').classList.r
 async function saveEquipamento3d() {
   if (!lab3dState.currentLab) { toast('Selecione um laboratório primeiro','error'); return; }
   const lab = lab3dState.currentLab;
-  const existing = lab3dState.equipamentos.filter(e=>e.laboratorio_id===lab.id).length;
   const obj = {
     laboratorio_id: lab.id,
     tipo: document.getElementById('ne3-tipo').value,
@@ -1644,9 +1919,8 @@ async function saveEquipamento3d() {
     ram_gb: parseInt(document.getElementById('ne3-ram').value)||null,
     armazenamento_gb: parseInt(document.getElementById('ne3-hd').value)||null,
     sistema_operacional: document.getElementById('ne3-so').value||null,
-    observacao: document.getElementById('ne3-obs').value||null,
-    posicao_x: existing % (lab.layout_largura||10),
-    posicao_y: Math.floor(existing / (lab.layout_largura||10))
+    observacao: document.getElementById('ne3-obs').value||null
+    // FIX #4: não pré-preencher posicao_x/y — usa hash determinístico via ISO.equipCell
   };
   const {error} = await db.from('equipamentos').insert(obj);
   if (error) { toast(error.message,'error'); return; }
@@ -1656,7 +1930,6 @@ async function saveEquipamento3d() {
   build3dSidebar();
   draw3dLab();
   closeAddModal3d();
-  // Update KPIs
   select3dLab(lab.id);
 }
 
