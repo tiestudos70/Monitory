@@ -1126,10 +1126,14 @@ async function confirmDeletePredio(id){
 // ============================================================
 async function renderLaboratorios(predioFilter=null) {
   setLoading();
-  const [{ data:labs },{ data:predios }] = await Promise.all([
+  const [{ data:labsView },{ data:predios },{ data:labsManual }] = await Promise.all([
     db.from('vw_lab_resumo').select('*'),
-    db.from('predios').select('*')
+    db.from('predios').select('*'),
+    db.from('laboratorios').select('id,maquinas_manual')
   ]);
+  // Mescla maquinas_manual (da tabela real) com os dados da view
+  const manualMap = Object.fromEntries((labsManual||[]).map(l=>[l.id,l.maquinas_manual]));
+  const labs = (labsView||[]).map(l=>({...l, maquinas_manual: manualMap[l.id]??null}));
   if (canEdit()) document.getElementById('topbar-actions').innerHTML = `<button class="btn btn-red" onclick="modalNovoLab()">＋ Novo Lab</button>`;
   const filterOptions = (predios||[]).map(p=>`<option value="${p.id}">${p.nome}</option>`).join('');
   const allLabs = predioFilter ? (labs||[]).filter(l=>l.predio_id===predioFilter) : (labs||[]);
