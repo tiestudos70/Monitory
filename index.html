@@ -1107,14 +1107,21 @@ async function confirmDeletePredio(id){
   const {data:labs}=await db.from('laboratorios').select('id').eq('predio_id',id);
   if(labs&&labs.length>0){
     const labIds=labs.map(l=>l.id);
-    // 2) exclui equipamentos de todos os labs
+    // 2) busca equipamentos de todos os labs
+    const {data:equips}=await db.from('equipamentos').select('id').in('laboratorio_id',labIds);
+    if(equips&&equips.length>0){
+      const equipIds=equips.map(e=>e.id);
+      // 3) exclui chamados vinculados
+      await db.from('manutencoes').delete().in('equipamento_id',equipIds);
+    }
+    // 4) exclui equipamentos de todos os labs
     const {error:errEquip}=await db.from('equipamentos').delete().in('laboratorio_id',labIds);
     if(errEquip){toast('Erro ao excluir equipamentos: '+errEquip.message,'error');return;}
-    // 3) exclui os labs
+    // 5) exclui os labs
     const {error:errLabs}=await db.from('laboratorios').delete().eq('predio_id',id);
     if(errLabs){toast('Erro ao excluir laboratórios: '+errLabs.message,'error');return;}
   }
-  // 4) exclui o prédio
+  // 6) exclui o prédio
   const {error}=await db.from('predios').delete().eq('id',id);
   if(error){toast(error.message,'error');return;}
   try{await db.from('logs_acesso').insert({usuario_id:currentUser.id,usuario_email:currentUser.email,acao:'excluir',tabela:'predios',detalhes:{id}});}catch(e){}
@@ -1170,8 +1177,17 @@ async function deleteLab(id, nome, totalMaquinas){
     `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-red" onclick="confirmDeleteLab('${id}')">Excluir Tudo</button>`);
 }
 async function confirmDeleteLab(id){
+  // 1) Busca IDs dos equipamentos do lab
+  const {data:equips}=await db.from('equipamentos').select('id').eq('laboratorio_id',id);
+  if(equips&&equips.length>0){
+    const equipIds=equips.map(e=>e.id);
+    // 2) Exclui chamados vinculados aos equipamentos
+    await db.from('manutencoes').delete().in('equipamento_id',equipIds);
+  }
+  // 3) Exclui equipamentos
   const {error:errEquip}=await db.from('equipamentos').delete().eq('laboratorio_id',id);
   if(errEquip){toast('Erro ao excluir equipamentos: '+errEquip.message,'error');return;}
+  // 4) Exclui o lab
   const {error}=await db.from('laboratorios').delete().eq('id',id);
   if(error){toast(error.message,'error');return;}
   try{await db.from('logs_acesso').insert({usuario_id:currentUser.id,usuario_email:currentUser.email,acao:'excluir',tabela:'laboratorios',detalhes:{id}});}catch(e){}
@@ -1383,6 +1399,8 @@ async function deleteEquip(id){
     `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-red" onclick="confirmDeleteEquip('${id}')">Excluir</button>`);
 }
 async function confirmDeleteEquip(id){
+  // Exclui chamados vinculados antes do equipamento
+  await db.from('manutencoes').delete().eq('equipamento_id',id);
   const {error}=await db.from('equipamentos').delete().eq('id',id);
   if(error){toast(error.message,'error');return;}
   try{await db.from('logs_acesso').insert({usuario_id:currentUser.id,usuario_email:currentUser.email,acao:'excluir',tabela:'equipamentos',detalhes:{id}});}catch(e){}
