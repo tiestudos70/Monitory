@@ -1169,7 +1169,13 @@ async function renderLaboratorios(predioFilter=null) {
   const labs = (labsView||[]).map(l=>({...l, maquinas_manual: manualMap[l.id]??null}));
   if (canEdit()) document.getElementById('topbar-actions').innerHTML = `<button class="btn btn-red" onclick="modalNovoLab()">＋ Novo Lab</button>`;
   const filterOptions = (predios||[]).map(p=>`<option value="${p.id}">${p.nome}</option>`).join('');
-  const allLabs = predioFilter ? (labs||[]).filter(l=>l.predio_id===predioFilter) : (labs||[]);
+  const allLabs = (predioFilter ? (labs||[]).filter(l=>l.predio_id===predioFilter) : (labs||[]))
+    .sort((a,b) => {
+      const fa = parseInt(a.andar) || 999;
+      const fb = parseInt(b.andar) || 999;
+      if (fa !== fb) return fa - fb;
+      return (a.numero||'').localeCompare(b.numero||'', undefined, { numeric: true });
+    });
   const rows = allLabs.map(l => {
     const pct = l.total_maquinas ? Math.round(l.maquinas_ok/l.total_maquinas*100) : 0;
     const pctCls = pct>80?'pf-green':pct>50?'pf-orange':'pf-red';
