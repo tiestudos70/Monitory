@@ -700,9 +700,21 @@ async function initApp() {
   document.getElementById('user-avatar').textContent = (perfil?.nome || currentUser.email)[0].toUpperCase();
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app').style.display = 'block';
-  renderNavUnidades().catch(console.error); // carrega unidades no sidebar (Supabase)
   setupRealtime();
   showPage('dashboard');
+  // Carrega unidades em background — não bloqueia o login
+  setTimeout(() => renderNavUnidades().catch(e => {
+    console.warn('renderNavUnidades falhou (tabela units pode não existir ainda):', e);
+    // Fallback: mostra só Aimorés no nav
+    const container = document.getElementById('nav-inventario-items');
+    if (container) container.innerHTML = `
+      <div class="nav-item" onclick="navTo('inventario_aimores')" id="nav-inv-aimores">
+        <span class="icon">🏫</span> Aimorés
+      </div>
+      <div class="nav-item" onclick="navTo('gerenciar_unidades')" style="opacity:.75;font-size:11px">
+        <span class="icon">➕</span> Gerenciar Unidades
+      </div>`;
+  }), 100);
   // Iniciar monitoramento de alertas
   await checkAlertas();
   setInterval(checkAlertas, 5 * 60 * 1000); // verifica a cada 5 minutos
@@ -3597,7 +3609,6 @@ async function aimConfirmDeleteUnit(key) {
     toast('Unidade excluída', 'info');
     renderGerenciarUnidades();
   } catch(e) { toast('Erro ao excluir: ' + e.message, 'error'); }
-}
 }
 
 // ============================================================
