@@ -700,7 +700,7 @@ async function initApp() {
   document.getElementById('user-avatar').textContent = (perfil?.nome || currentUser.email)[0].toUpperCase();
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app').style.display = 'block';
-  renderNavUnidades(); // carrega unidades no sidebar
+  renderNavUnidades().catch(console.error); // carrega unidades no sidebar (Supabase)
   setupRealtime();
   showPage('dashboard');
   // Iniciar monitoramento de alertas
@@ -2522,29 +2522,58 @@ let _aimState = {
 };
 const AIM_PAGE = 25;
 
-// ── REGISTRO DE UNIDADES ──
-let _currentUnit = 'aimores'; // unidade ativa no momento
-
-function getUnitsRegistry() {
-  try {
-    const raw = localStorage.getItem('nati_units_registry');
-    if (raw) return JSON.parse(raw);
-  } catch(e) {}
-  // Default: apenas Aimorés pré-cadastrada
-  return {
-    aimores: { name: 'Aimorés', emoji: '🏫', color: '#c8102e', createdAt: '2024-01-01' }
-  };
+// ── HELPER SUPABASE REST ──
+async function sbFetch(path, options = {}) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    headers: {
+      'apikey': SUPABASE_ANON,
+      'Authorization': `Bearer ${SUPABASE_ANON}`,
+      'Content-Type': 'application/json',
+      'Prefer': options.prefer || 'return=representation',
+      ...(options.extraHeaders || {})
+    },
+    method: options.method || 'GET',
+    body: options.body || undefined
+  });
+  if (!res.ok) { const err = await res.text(); throw new Error(`Supabase [${res.status}]: ${err}`); }
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
 }
 
-function saveUnitsRegistry(reg) {
-  try { localStorage.setItem('nati_units_registry', JSON.stringify(reg)); } catch(e) {}
+// ── REGISTRO DE UNIDADES ──
+let _currentUnit = 'aimores'; // unidade ativa no momento
+let _unitsCache = null; // cache local para evitar múltiplas requisições
+
+async function getUnitsRegistry() {
+  try {
+    const data = await sbFetch('units?order=created_at.asc');
+    const reg = {};
+    (data || []).forEach(u => {
+      reg[u.key] = { name: u.name, emoji: u.emoji, color: u.color, createdAt: u.created_at };
+    });
+    _unitsCache = reg;
+    return reg;
+  } catch(e) {
+    console.error('getUnitsRegistry:', e);
+    // Fallback local caso Supabase não esteja configurado
+    return { aimores: { name: 'Aimorés', emoji: '🏫', color: '#c8102e', createdAt: '2024-01-01' } };
+  }
+}
+
+async function saveUnitsRegistry(key, name, emoji, color, createdAt) {
+  // No Supabase salvamos por operação individual (upsert)
+  await sbFetch('units', {
+    method: 'POST',
+    prefer: 'return=representation',
+    body: JSON.stringify({ key, name, emoji, color: color||'#c8102e', created_at: createdAt || new Date().toISOString().slice(0,10) }),
+    extraHeaders: { 'Prefer': 'resolution=merge-duplicates,return=representation' }
+  });
+  _unitsCache = null;
 }
 
 function getUnitDataKey(unitKey, type) {
-  if (unitKey === 'aimores') {
-    // Aimorés usa chaves legadas por compatibilidade
-    return { labs: 'aim_labs', salas: 'aim_salas', admin: 'aim_admin' }[type];
-  }
+  // Mantido por compatibilidade com funções que ainda o referenciam
+  if (unitKey === 'aimores') return { labs: 'aim_labs', salas: 'aim_salas', admin: 'aim_admin' }[type];
   return `aim_${unitKey}_${type}`;
 }
 
@@ -2556,8 +2585,8 @@ function getUnitStaticData(unitKey) {
 }
 
 // Renderiza dinamicamente os itens de nav do inventário
-function renderNavUnidades() {
-  const reg = getUnitsRegistry();
+async function renderNavUnidades() {
+  const reg = await getUnitsRegistry();
   const container = document.getElementById('nav-inventario-items');
   if (!container) return;
   container.innerHTML = Object.entries(reg).map(([key, u]) =>
@@ -2582,35 +2611,77 @@ function aimInit(unitKey) {
   });
 }
 
-// ── PERSISTÊNCIA SIMPLES (localStorage) ──
-function aimSave(unitKey) {
+// ── PERSISTÊNCIA SUPABASE ──
+async function aimSave(unitKey) {
   unitKey = unitKey || _currentUnit;
   try {
-    localStorage.setItem(getUnitDataKey(unitKey,'labs'), JSON.stringify(_aimState.labsData));
-    localStorage.setItem(getUnitDataKey(unitKey,'salas'), JSON.stringify(_aimState.salas));
-    localStorage.setItem(getUnitDataKey(unitKey,'admin'), JSON.stringify(_aimState.admin));
-  } catch(e){}
+    // Salva labs/máquinas
+    const labsPayload = Object.entries(_aimState.labsData).map(([nome, machines]) => ({
+      unit_key: unitKey, nome, machines: JSON.stringify(machines)
+    }));
+    // Upsert labs
+    for (const lab of labsPayload) {
+      await sbFetch(`unit_labs?unit_key=eq.${unitKey}&nome=eq.${encodeURIComponent(lab.nome)}`, {
+        method: 'PATCH', body: JSON.stringify({ machines: lab.machines }),
+        extraHeaders: { 'Prefer': 'return=minimal' }
+      });
+    }
+    // Salva salas
+    await sbFetch(`unit_salas_snapshot?unit_key=eq.${unitKey}`, {
+      method: 'DELETE', extraHeaders: { 'Prefer': 'return=minimal' }
+    }).catch(()=>{});
+    if (_aimState.salas.length) {
+      await sbFetch('unit_salas_snapshot', {
+        method: 'POST',
+        body: JSON.stringify(_aimState.salas.map(s => ({ ...s, unit_key: unitKey }))),
+        extraHeaders: { 'Prefer': 'return=minimal' }
+      });
+    }
+    // Salva admin
+    await sbFetch(`unit_admin_snapshot?unit_key=eq.${unitKey}`, {
+      method: 'DELETE', extraHeaders: { 'Prefer': 'return=minimal' }
+    }).catch(()=>{});
+    if (_aimState.admin.length) {
+      await sbFetch('unit_admin_snapshot', {
+        method: 'POST',
+        body: JSON.stringify(_aimState.admin.map(a => ({ ...a, unit_key: unitKey }))),
+        extraHeaders: { 'Prefer': 'return=minimal' }
+      });
+    }
+  } catch(e) { console.error('aimSave:', e); }
 }
-function aimLoad(unitKey) {
+
+async function aimLoad(unitKey) {
   unitKey = unitKey || _currentUnit;
   try {
-    const l = localStorage.getItem(getUnitDataKey(unitKey,'labs'));   if (l) _aimState.labsData = JSON.parse(l);
-    const s = localStorage.getItem(getUnitDataKey(unitKey,'salas'));  if (s) _aimState.salas = JSON.parse(s);
-    const a = localStorage.getItem(getUnitDataKey(unitKey,'admin'));  if (a) _aimState.admin = JSON.parse(a);
-  } catch(e) {}
+    // Carrega labs e máquinas
+    const labs = await sbFetch(`unit_labs?unit_key=eq.${unitKey}`);
+    if (labs && labs.length) {
+      _aimState.labsData = {};
+      labs.forEach(lab => {
+        try { _aimState.labsData[lab.nome] = JSON.parse(lab.machines || '[]'); } catch(e) { _aimState.labsData[lab.nome] = []; }
+      });
+    }
+    // Carrega salas
+    const salas = await sbFetch(`unit_salas_snapshot?unit_key=eq.${unitKey}`).catch(()=>null);
+    if (salas && salas.length) _aimState.salas = salas;
+    // Carrega admin
+    const admin = await sbFetch(`unit_admin_snapshot?unit_key=eq.${unitKey}`).catch(()=>null);
+    if (admin && admin.length) _aimState.admin = admin;
+  } catch(e) { console.error('aimLoad:', e); }
 }
 
 // ── RENDER PRINCIPAL (compatibilidade) ──
 function renderInventarioAimores() { renderInventarioUnidade('aimores'); }
 
 // ── RENDER GENÉRICO POR UNIDADE ──
-function renderInventarioUnidade(unitKey) {
+async function renderInventarioUnidade(unitKey) {
   _currentUnit = unitKey;
-  const reg = getUnitsRegistry();
+  const reg = await getUnitsRegistry();
   const unit = reg[unitKey] || { name: unitKey, emoji: '📦', color: '#c8102e' };
 
   aimInit(unitKey);
-  aimLoad(unitKey); // carrega edições salvas
+  await aimLoad(unitKey); // carrega edições salvas do Supabase
 
   const labKeys = Object.keys(AIMORES_DATA.labs);
   const totalMaquinas = labKeys.reduce((s,k)=>s+(_aimState.labsData[k]||[]).length,0);
@@ -2735,18 +2806,24 @@ function aimAddLabModal() {
      <button class="btn btn-red" onclick="aimConfirmAddLab()">Criar Lab</button>`
   );
 }
-function aimConfirmAddLab() {
+async function aimConfirmAddLab() {
   const nome = document.getElementById('aim-new-lab-nome').value.trim();
   if (!nome) { toast('Informe o nome do lab','error'); return; }
   const andar = document.getElementById('aim-new-lab-andar').value || '?';
   const cap = document.getElementById('aim-new-lab-cap').value || '?';
   const tipo = document.getElementById('aim-new-lab-tipo').value;
-  if (_aimState.labsData[nome]) { toast('Já existe um lab com esse nome','error'); return; }
-  _aimState.labsData[nome] = [];
-  aimSave(_currentUnit);
-  closeModal();
-  toast(`Lab "${nome}" criado!`, 'success');
-  aimRenderLabsList();
+  try {
+    if (_aimState.labsData[nome]) { toast('Já existe um lab com esse nome','error'); return; }
+    await sbFetch('unit_labs', {
+      method: 'POST',
+      body: JSON.stringify({ unit_key: _currentUnit, nome, andar: String(andar), capacidade: String(cap), tipo, machines: '[]' }),
+      extraHeaders: { 'Prefer': 'return=minimal' }
+    });
+    _aimState.labsData[nome] = [];
+    closeModal();
+    toast(`Lab "${nome}" criado!`, 'success');
+    aimRenderLabsList();
+  } catch(e) { toast('Erro ao criar lab: ' + e.message, 'error'); }
 }
 function aimDeleteLab(labKey) {
   const count = (_aimState.labsData[labKey] || []).length;
@@ -2756,12 +2833,16 @@ function aimDeleteLab(labKey) {
      <button class="btn btn-red" onclick="aimConfirmDeleteLab('${labKey}')">Excluir</button>`
   );
 }
-function aimConfirmDeleteLab(labKey) {
-  delete _aimState.labsData[labKey];
-  aimSave(_currentUnit);
-  closeModal();
-  toast(`Lab "${labKey}" excluído`, 'info');
-  aimRenderLabsList();
+async function aimConfirmDeleteLab(labKey) {
+  try {
+    await sbFetch(`unit_labs?unit_key=eq.${_currentUnit}&nome=eq.${encodeURIComponent(labKey)}`, {
+      method: 'DELETE', extraHeaders: { 'Prefer': 'return=minimal' }
+    });
+    delete _aimState.labsData[labKey];
+    closeModal();
+    toast(`Lab "${labKey}" excluído`, 'info');
+    aimRenderLabsList();
+  } catch(e) { toast('Erro ao excluir lab: ' + e.message, 'error'); }
 }
 
 function aimRenderLabMachines() {
@@ -3368,22 +3449,30 @@ async function aimDoImport() {
 // ███████╗  GERENCIAR UNIDADES
 // ============================================================
 
-function renderGerenciarUnidades() {
-  const reg = getUnitsRegistry();
+async function renderGerenciarUnidades() {
+  const reg = await getUnitsRegistry();
+  // Busca contagens de labs e máquinas do Supabase
+  const allLabs = await sbFetch('unit_labs?select=unit_key,nome,machines').catch(()=>[]);
+  const labsByUnit = {};
+  (allLabs||[]).forEach(lab => {
+    if (!labsByUnit[lab.unit_key]) labsByUnit[lab.unit_key] = { numLabs: 0, numMaquinas: 0 };
+    labsByUnit[lab.unit_key].numLabs++;
+    try { labsByUnit[lab.unit_key].numMaquinas += (JSON.parse(lab.machines||'[]')).length; } catch(e){}
+  });
+
   const rows = Object.entries(reg).map(([key, u]) => {
-    const labsKey = getUnitDataKey(key, 'labs');
-    let numLabs = 0, numMaquinas = 0;
-    try {
-      const d = JSON.parse(localStorage.getItem(labsKey) || 'null');
-      if (d) { numLabs = Object.keys(d).length; numMaquinas = Object.values(d).reduce((s,a)=>s+a.length,0); }
-      else if (key === 'aimores') { numLabs = Object.keys(AIMORES_DATA.labs).length; numMaquinas = Object.values(AIMORES_DATA.labs).reduce((s,v)=>s+v.machines.length,0); }
-    } catch(e) {}
+    const stats = labsByUnit[key] || { numLabs: 0, numMaquinas: 0 };
+    // Aimorés: fallback para dados estáticos se ainda não migrou
+    if (key === 'aimores' && stats.numLabs === 0) {
+      stats.numLabs = Object.keys(AIMORES_DATA.labs).length;
+      stats.numMaquinas = Object.values(AIMORES_DATA.labs).reduce((s,v)=>s+v.machines.length,0);
+    }
     const isAimores = key === 'aimores';
     return `<tr>
       <td><span style="font-size:20px">${u.emoji||'📦'}</span></td>
       <td><strong>${u.name}</strong><br><span style="font-size:11px;color:var(--text2)">${key}</span></td>
-      <td class="td-mono">${numLabs}</td>
-      <td class="td-mono">${numMaquinas}</td>
+      <td class="td-mono">${stats.numLabs}</td>
+      <td class="td-mono">${stats.numMaquinas}</td>
       <td><span style="font-size:11px;color:var(--text2)">${u.createdAt||'—'}</span></td>
       <td>
         <div style="display:flex;gap:6px">
@@ -3413,7 +3502,7 @@ function renderGerenciarUnidades() {
       <div style="font-size:14px;font-weight:700;margin-bottom:8px">💡 Como funciona</div>
       <div style="font-size:13px;color:var(--text2);line-height:1.7">
         Cada unidade tem seu próprio inventário de <strong>Laboratórios</strong>, <strong>Salas de Aula</strong> e <strong>Administrativo</strong> — totalmente independentes.<br>
-        Os dados ficam salvos no navegador (localStorage). Exporte CSVs para backup ou importar para o banco Supabase.<br>
+        Os dados ficam salvos no <strong>Supabase</strong> e ficam disponíveis em qualquer dispositivo.<br>
         A unidade <strong>Aimorés</strong> vem pré-carregada com dados do inventário físico real.
       </div>
     </div>
@@ -3439,25 +3528,25 @@ function aimNewUnitModal() {
   });
 }
 
-function aimConfirmNewUnit() {
+async function aimConfirmNewUnit() {
   const nome = document.getElementById('nu-nome').value.trim();
   const key  = document.getElementById('nu-key').value.trim();
   const emoji = document.getElementById('nu-emoji').value.trim() || '📦';
   if (!nome || !key) { toast('Preencha nome e identificador', 'error'); return; }
-  const reg = getUnitsRegistry();
-  if (reg[key]) { toast('Já existe uma unidade com esse identificador', 'error'); return; }
-  reg[key] = { name: nome, emoji, color: '#c8102e', createdAt: new Date().toISOString().slice(0,10) };
-  saveUnitsRegistry(reg);
-  // Inicializa dados vazios
   try {
-    localStorage.setItem(getUnitDataKey(key,'labs'), JSON.stringify({}));
-    localStorage.setItem(getUnitDataKey(key,'salas'), JSON.stringify([]));
-    localStorage.setItem(getUnitDataKey(key,'admin'), JSON.stringify([]));
-  } catch(e) {}
-  renderNavUnidades();
-  closeModal();
-  toast(`Unidade "${nome}" criada! Abrindo inventário...`, 'success');
-  setTimeout(() => navTo(`inventario_${key}`), 600);
+    const reg = await getUnitsRegistry();
+    if (reg[key]) { toast('Já existe uma unidade com esse identificador', 'error'); return; }
+    await sbFetch('units', {
+      method: 'POST',
+      body: JSON.stringify({ key, name: nome, emoji, color: '#c8102e', created_at: new Date().toISOString().slice(0,10) }),
+      extraHeaders: { 'Prefer': 'return=minimal' }
+    });
+    _unitsCache = null;
+    await renderNavUnidades();
+    closeModal();
+    toast(`Unidade "${nome}" criada! Abrindo inventário...`, 'success');
+    setTimeout(() => navTo(`inventario_${key}`), 600);
+  } catch(e) { toast('Erro ao criar unidade: ' + e.message, 'error'); }
 }
 
 function aimEditUnit(key) {
@@ -3472,17 +3561,22 @@ function aimEditUnit(key) {
      <button class="btn btn-red" onclick="aimConfirmEditUnit('${key}')">Salvar</button>`
   );
 }
-function aimConfirmEditUnit(key) {
+async function aimConfirmEditUnit(key) {
   const nome = document.getElementById('eu-nome').value.trim();
   const emoji = document.getElementById('eu-emoji').value.trim() || '📦';
   if (!nome) { toast('Informe o nome', 'error'); return; }
-  const reg = getUnitsRegistry();
-  reg[key].name = nome; reg[key].emoji = emoji;
-  saveUnitsRegistry(reg);
-  renderNavUnidades();
-  closeModal();
-  toast('Unidade atualizada!', 'success');
-  renderGerenciarUnidades();
+  try {
+    await sbFetch(`units?key=eq.${key}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ name: nome, emoji }),
+      extraHeaders: { 'Prefer': 'return=minimal' }
+    });
+    _unitsCache = null;
+    await renderNavUnidades();
+    closeModal();
+    toast('Unidade atualizada!', 'success');
+    renderGerenciarUnidades();
+  } catch(e) { toast('Erro ao editar: ' + e.message, 'error'); }
 }
 
 function aimDeleteUnit(key) {
@@ -3494,20 +3588,16 @@ function aimDeleteUnit(key) {
      <button class="btn btn-red" onclick="aimConfirmDeleteUnit('${key}')">Excluir Tudo</button>`
   );
 }
-function aimConfirmDeleteUnit(key) {
-  const reg = getUnitsRegistry();
-  delete reg[key];
-  saveUnitsRegistry(reg);
-  // Apaga dados do localStorage
+async function aimConfirmDeleteUnit(key) {
   try {
-    localStorage.removeItem(getUnitDataKey(key,'labs'));
-    localStorage.removeItem(getUnitDataKey(key,'salas'));
-    localStorage.removeItem(getUnitDataKey(key,'admin'));
-  } catch(e) {}
-  renderNavUnidades();
-  closeModal();
-  toast('Unidade excluída', 'info');
-  renderGerenciarUnidades();
+    await sbFetch(`units?key=eq.${key}`, { method: 'DELETE', extraHeaders: { 'Prefer': 'return=minimal' } });
+    _unitsCache = null;
+    await renderNavUnidades();
+    closeModal();
+    toast('Unidade excluída', 'info');
+    renderGerenciarUnidades();
+  } catch(e) { toast('Erro ao excluir: ' + e.message, 'error'); }
+}
 }
 
 // ============================================================
