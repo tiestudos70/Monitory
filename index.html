@@ -1071,7 +1071,7 @@ async function renderPredios() {
   setLoading();
   const { data: predios } = await db.from('vw_predio_resumo').select('*');
   if (isAdmin()) document.getElementById('topbar-actions').innerHTML = `<button class="btn btn-red" onclick="modalNovoPredio()">＋ Novo Prédio</button>`;
-  const rows = (predios||[]).map(p => `<tr><td>${predioBadge(p.nome,p.cor)}</td><td class="td-mono">${p.total_labs}</td><td class="td-mono">${p.total_equipamentos}</td><td>${p.operacionais?`<span class="badge badge-green">${p.operacionais} op.</span>`:'—'}</td><td>${p.em_manutencao?`<span class="badge badge-orange">${p.em_manutencao}</span>`:'—'}</td>${isAdmin()?`<td class="actions-cell"><button class="btn btn-ghost btn-sm" onclick="modalEditPredio('${p.id}','${p.nome}','${p.cor}')">✏️ Editar</button></td>`:'<td></td>'}</tr>`).join('');
+  const rows = (predios||[]).map(p => `<tr><td>${predioBadge(p.nome,p.cor)}</td><td class="td-mono">${p.total_labs}</td><td class="td-mono">${p.total_equipamentos}</td><td>${p.operacionais?`<span class="badge badge-green">${p.operacionais} op.</span>`:'—'}</td><td>${p.em_manutencao?`<span class="badge badge-orange">${p.em_manutencao}</span>`:'—'}</td>${isAdmin()?`<td class="actions-cell"><button class="btn btn-ghost btn-sm" onclick="modalEditPredio('${p.id}','${p.nome}','${p.cor}')">✏️ Editar</button><button class="btn btn-ghost btn-sm" onclick="deletePredio('${p.id}','${p.nome}',${p.total_labs||0})">🗑</button></td>`:'<td></td>'}</tr>`).join('');
   setContent(`<div class="section-header"><div><div class="section-title">Prédios</div><div class="section-sub">Visão geral por prédio</div></div></div><div class="table-card"><div class="table-wrap"><table><thead><tr><th>Prédio</th><th>Labs</th><th>Equipamentos</th><th>Operacionais</th><th>Manutenção</th><th></th></tr></thead><tbody>${rows||'<tr><td colspan="6"><div class="empty">Nenhum prédio cadastrado.<br><br><button class="btn btn-red btn-sm" onclick="modalNovoPredio()">＋ Novo Prédio</button></div></td></tr>'}</tbody></table></div></div>`);
 }
 
@@ -1092,6 +1092,18 @@ async function updatePredio(id){
   const {error}=await db.from('predios').update({nome:document.getElementById('ep-nome').value,cor:document.getElementById('ep-cor').value}).eq('id',id);
   if(error){toast(error.message,'error');return;}
   toast('Prédio atualizado!');closeModal();renderPredios();
+}
+
+async function deletePredio(id, nome, totalLabs){
+  if(totalLabs>0){toast(`Não é possível excluir: "${nome}" tem ${totalLabs} laboratório(s). Remova-os primeiro.`,'error');return;}
+  openModal('Excluir Prédio',
+    `<p style="color:var(--text2);font-size:14px">Tem certeza que deseja excluir o prédio <strong style="color:var(--text)">${nome}</strong>? Esta ação não pode ser desfeita.</p>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-red" onclick="confirmDeletePredio('${id}')">Excluir</button>`);
+}
+async function confirmDeletePredio(id){
+  const {error}=await db.from('predios').delete().eq('id',id);
+  if(error){toast(error.message,'error');return;}
+  toast('Prédio excluído!','success');closeModal();renderPredios();
 }
 
 // ============================================================
@@ -1190,8 +1202,9 @@ async function renderEquipamentos() {
       <select id="equip-predio-filter" onchange="filterEquip()"><option value="">Todos os prédios</option>${predioOpts}</select>
       ${sem_pat_count>0?`<button class="btn btn-ghost btn-sm" id="btn-sempat-filter" onclick="toggleSemPatFilter()" title="${sem_pat_count} sem patrimônio">⚠ Sem pat. (${sem_pat_count})</button>`:''}
     </div>
+    <div id="bulk-bar" style="display:none;background:rgba(200,16,46,0.12);border:1px solid rgba(200,16,46,0.3);border-radius:8px;padding:10px 16px;margin-bottom:12px;align-items:center;gap:12px"><span id="bulk-count" style="font-size:13px;color:var(--text)">0 selecionados</span><button class="btn btn-red btn-sm" onclick="bulkDelete()">🗑 Excluir Selecionados</button><button class="btn btn-ghost btn-sm" onclick="clearSelection()">✕ Limpar</button></div>
     <div class="table-card">
-      <div class="table-wrap"><table><thead><tr><th>Tipo</th><th>Marca/Modelo</th><th>Patrimônio</th><th>Série</th><th>Lab</th><th>Prédio</th><th>Status</th><th>Ações</th></tr></thead><tbody id="equip-tbody"></tbody></table></div>
+      <div class="table-wrap"><table><thead><tr><th style="width:36px"><input type="checkbox" id="equip-check-all" onchange="toggleCheckAll(this)" title="Selecionar todos"/></th><th>Tipo</th><th>Marca/Modelo</th><th>Patrimônio</th><th>Série</th><th>Lab</th><th>Prédio</th><th>Status</th><th>Ações</th></tr></thead><tbody id="equip-tbody"></tbody></table></div>
       <div id="equip-pagination"></div>
     </div>`;
 
@@ -1199,6 +1212,40 @@ async function renderEquipamentos() {
 }
 
 let _filterSemPat = false;
+
+function toggleCheckAll(cb){
+  document.querySelectorAll('.equip-check').forEach(c=>c.checked=cb.checked);
+  updateBulkBar();
+}
+function updateBulkBar(){
+  const checked=document.querySelectorAll('.equip-check:checked');
+  const bar=document.getElementById('bulk-bar');
+  const cnt=document.getElementById('bulk-count');
+  if(bar){bar.style.display=checked.length>0?'flex':'none';}
+  if(cnt){cnt.textContent=`${checked.length} selecionado(s)`;}
+  const all=document.getElementById('equip-check-all');
+  if(all){const total=document.querySelectorAll('.equip-check').length;all.checked=total>0&&checked.length===total;all.indeterminate=checked.length>0&&checked.length<total;}
+}
+function clearSelection(){
+  document.querySelectorAll('.equip-check').forEach(c=>c.checked=false);
+  const all=document.getElementById('equip-check-all');if(all){all.checked=false;all.indeterminate=false;}
+  updateBulkBar();
+}
+async function bulkDelete(){
+  const ids=[...document.querySelectorAll('.equip-check:checked')].map(c=>c.value);
+  if(!ids.length){toast('Nenhum equipamento selecionado','error');return;}
+  openModal('Excluir Equipamentos',
+    `<p style="color:var(--text2);font-size:14px">Tem certeza que deseja excluir <strong style="color:var(--text)">${ids.length} equipamento(s)</strong>? Esta ação não pode ser desfeita.</p>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-red" onclick="confirmBulkDelete(${JSON.stringify(ids)})">Excluir ${ids.length}</button>`);
+}
+async function confirmBulkDelete(ids){
+  const {error}=await db.from('equipamentos').delete().in('id',ids);
+  if(error){toast(error.message,'error');return;}
+  // Log
+  try{await db.from('logs_acesso').insert({usuario_id:currentUser.id,usuario_email:currentUser.email,acao:'excluir_lote',tabela:'equipamentos',detalhes:{quantidade:ids.length}});}catch(e){}
+  toast(`${ids.length} equipamento(s) excluído(s)!`,'success');closeModal();renderEquipamentos();
+}
+
 function toggleSemPatFilter() {
   _filterSemPat = !_filterSemPat;
   document.getElementById('btn-sempat-filter')?.classList.toggle('btn-active', _filterSemPat);
@@ -1235,7 +1282,7 @@ function renderEquipPage() {
   const pgEl=document.getElementById('equip-pagination');
   if(!tbody)return;
   const pageData = equipData.slice(equipPage*PAGE_SIZE, (equipPage+1)*PAGE_SIZE);
-  const rows=pageData.map(e=>{const lab=e.laboratorios,predio=lab?.predios;return`<tr id="equip-${e.id}" class="${!e.patrimonio?'row-sem-pat':''}"><td><strong>${e.tipo}</strong></td><td>${e.marca||'—'} ${e.modelo||''}</td><td class="td-mono">${e.patrimonio?e.patrimonio:`<span class="pat-missing">s/ pat.</span>`}</td><td class="td-mono">${e.numero_serie||'—'}</td><td>${lab?`${lab.numero} · ${lab.nome}`:'—'}</td><td>${predio?predioBadge(predio.nome,predio.cor):'—'}</td><td>${statusBadge(e.status)}</td><td class="actions-cell"><button class="btn btn-ghost btn-sm" onclick="showQR('${e.id}','${e.patrimonio||e.id}')">QR</button>${canEdit()?`<button class="btn btn-ghost btn-sm" onclick="modalEditEquip('${e.id}')">✏️</button><button class="btn btn-ghost btn-sm" onclick="modalNovaManut('${e.id}')">🔧</button>`:''}<button class="btn btn-ghost btn-sm" onclick="verHistoricoEquip('${e.id}')">📋</button></td></tr>`;}).join('');
+  const rows=pageData.map(e=>{const lab=e.laboratorios,predio=lab?.predios;return`<tr id="equip-${e.id}" class="${!e.patrimonio?'row-sem-pat':''}<td><input type="checkbox" class="equip-check" value="${e.id}" onchange="updateBulkBar()"/></td>"><td><strong>${e.tipo}</strong></td><td>${e.marca||'—'} ${e.modelo||''}</td><td class="td-mono">${e.patrimonio?e.patrimonio:`<span class="pat-missing">s/ pat.</span>`}</td><td class="td-mono">${e.numero_serie||'—'}</td><td>${lab?`${lab.numero} · ${lab.nome}`:'—'}</td><td>${predio?predioBadge(predio.nome,predio.cor):'—'}</td><td>${statusBadge(e.status)}</td><td class="actions-cell"><button class="btn btn-ghost btn-sm" onclick="showQR('${e.id}','${e.patrimonio||e.id}')">QR</button>${canEdit()?`<button class="btn btn-ghost btn-sm" onclick="modalEditEquip('${e.id}')">✏️</button><button class="btn btn-ghost btn-sm" onclick="modalNovaManut('${e.id}')">🔧</button>`:''}<button class="btn btn-ghost btn-sm" onclick="verHistoricoEquip('${e.id}')">📋</button></td></tr>`;}).join('');
   tbody.innerHTML=rows||'<tr><td colspan="8"><div class="empty-state"><div class="es-icon">💻</div><h3>Nenhum equipamento</h3><p>Ajuste os filtros ou cadastre um novo</p>'+( canEdit()?'<br><button class="btn btn-red btn-sm" style="margin-top:12px" onclick="modalNovoEquip()">＋ Novo Equipamento</button>':'' )+'</div></td></tr>';
   if(pgEl) pgEl.innerHTML = buildPagination(equipData.length, equipPage, 'changeEquipPage', 'equip-pagination');
 }
@@ -1339,7 +1386,7 @@ function renderManutPage() {
   const pgEl=document.getElementById('manut-pagination');
   if(!tbody)return;
   const pageData=manutData.slice(manutPage*PAGE_SIZE,(manutPage+1)*PAGE_SIZE);
-  const rows=pageData.map(m=>{const e=m.equipamentos;return`<tr><td><strong>${m.titulo}</strong></td><td>${e?`${e.tipo} · ${e.marca||''} ${e.modelo||''}`:'—'}</td><td>${e?.laboratorios?`${e.laboratorios.numero} · ${e.laboratorios.nome}`:'—'}</td><td>${m.perfis?.nome||'—'}</td><td>${manutBadge(m.status)}</td><td>${prioridadeBadge(m.prioridade)}</td><td class="td-mono">${new Date(m.criado_em||m.criado_em||m.aberto_em||Date.now()).toLocaleDateString('pt-BR')}</td><td>${m.resolvido_em?`<span style="font-size:11px;color:var(--green)">✓ ${new Date(m.resolvido_em).toLocaleDateString('pt-BR')}</span>`:'—'}</td>${canEdit()?`<td><button class="btn btn-ghost btn-sm" onclick="modalEditManut('${m.id}')">✏️</button></td>`:'<td></td>'}</tr>`;}).join('');
+  const rows=pageData.map(m=>{const e=m.equipamentos;return`<tr><td><strong>${m.titulo}</strong></td><td>${e?`${e.tipo} · ${e.marca||''} ${e.modelo||''}`:'—'}</td><td>${e?.laboratorios?`${e.laboratorios.numero} · ${e.laboratorios.nome}`:'—'}</td><td>${m.perfis?.nome||'—'}</td><td>${manutBadge(m.status)}</td><td>${prioridadeBadge(m.prioridade)}</td><td class="td-mono">${new Date(m.criado_em||m.criado_em||m.aberto_em||Date.now()).toLocaleDateString('pt-BR')}</td><td>${m.resolvido_em?`<span style="font-size:11px;color:var(--green)">✓ ${new Date(m.resolvido_em).toLocaleDateString('pt-BR')}</span>`:'—'}</td>${canEdit()?`<td class="actions-cell"><button class="btn btn-ghost btn-sm" onclick="modalEditManut('${m.id}')">✏️</button><button class="btn btn-ghost btn-sm" onclick="deleteManut('${m.id}')">🗑</button></td>`:'<td></td>'}</tr>`;}).join('');
   tbody.innerHTML=rows||'<tr><td colspan="8"><div class="empty-state"><div class="es-icon">🔧</div><h3>Nenhum chamado</h3><p>Ajuste os filtros ou abra um novo chamado</p>'+(canEdit()?'<br><button class="btn btn-red btn-sm" style="margin-top:12px" onclick="modalNovaManutLivre()">＋ Novo Chamado</button>':'')+'</div></td></tr>';
   if(pgEl) pgEl.innerHTML = buildPagination(manutData.length, manutPage, 'changeManutPage', 'manut-pagination');
 }
@@ -1382,6 +1429,16 @@ async function updateManut(id){
   const {error}=await db.from('manutencoes').update({titulo:document.getElementById('em-titulo').value,descricao:document.getElementById('em-desc').value||null,prioridade:document.getElementById('em-prio').value,status,resolvido_em:status==='resolvido'?new Date().toISOString():null}).eq('id',id);
   if(error){toast(error.message,'error');return;}
   toast('Chamado atualizado!');closeModal();renderManutencoes();
+}
+async function deleteManut(id){
+  openModal('Excluir Chamado',
+    '<p style="color:var(--text2);font-size:14px">Tem certeza que deseja excluir este chamado? Esta ação não pode ser desfeita.</p>',
+    `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-red" onclick="confirmDeleteManut('${id}')">Excluir</button>`);
+}
+async function confirmDeleteManut(id){
+  const {error}=await db.from('manutencoes').delete().eq('id',id);
+  if(error){toast(error.message,'error');return;}
+  toast('Chamado excluído!','success');closeModal();renderManutencoes();
 }
 
 // ============================================================
@@ -1580,6 +1637,7 @@ async function renderUsuarios(){
     <td class="actions-cell">
       <button class="btn btn-ghost btn-sm" onclick="modalEditUser('${p.id}')">✏️ Editar</button>
       <button class="btn btn-ghost btn-sm" onclick="modalAlterarSenha('${p.id}',${p.id===currentUser.id},'${p.nome}')">🔑 Senha</button>
+      ${p.id!==currentUser.id?`<button class="btn btn-ghost btn-sm" onclick="deleteUsuario('${p.id}','${p.nome}')">🗑</button>`:''}
     </td>
   </tr>`).join('');
   setContent(`
@@ -1609,6 +1667,17 @@ async function updateUser(id){
   const {error}=await db.from('perfis').update({nome:document.getElementById('eu-nome').value,role:document.getElementById('eu-role').value,ativo:document.getElementById('eu-ativo').value==='true'}).eq('id',id);
   if(error){toast(error.message,'error');return;}
   toast('Usuário atualizado!');closeModal();renderUsuarios();
+}
+async function deleteUsuario(id, nome){
+  if(id===currentUser.id){toast('Você não pode excluir seu próprio usuário.','error');return;}
+  openModal('Excluir Usuário',
+    `<p style="color:var(--text2);font-size:14px">Tem certeza que deseja excluir o usuário <strong style="color:var(--text)">${nome}</strong>? Esta ação não pode ser desfeita.</p>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-red" onclick="confirmDeleteUsuario('${id}')">Excluir</button>`);
+}
+async function confirmDeleteUsuario(id){
+  const {error}=await db.from('perfis').delete().eq('id',id);
+  if(error){toast(error.message,'error');return;}
+  toast('Usuário excluído!','success');closeModal();renderUsuarios();
 }
 
 // ─── ALTERAR SENHA ───
