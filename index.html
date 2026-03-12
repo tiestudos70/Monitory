@@ -953,16 +953,22 @@ async function renderDashboard() {
   const tipoLabels = Object.keys(tipoCount).sort((a,b)=>tipoCount[b]-tipoCount[a]);
   const tipoVals = tipoLabels.map(k=>tipoCount[k]);
 
-  const now = new Date();
-  const monthLabels = [], monthVals = [];
-  for (let i=5; i>=0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
-    monthLabels.push(d.toLocaleDateString('pt-BR',{month:'short',year:'2-digit'}));
-    monthVals.push((manutAll||[]).filter(m => {
-      const md = new Date(m.criado_em||m.aberto_em);
-      return md.getFullYear()===d.getFullYear() && md.getMonth()===d.getMonth();
-    }).length);
-  }
+  // Distribuição por prédio
+  const predioMap = {};
+  (predios||[]).forEach(p => { predioMap[p.id] = { nome: p.nome, cor: p.cor||'#c8102e', op:0, manut:0, inativo:0, total:0 }; });
+  (labs||[]).forEach(l => {
+    if (!l.predio_id || !predioMap[l.predio_id]) return;
+    const leqs = (equip||[]).filter(e => e.laboratorio_id === l.id);
+    predioMap[l.predio_id].op     += leqs.filter(e=>e.status==='operacional').length;
+    predioMap[l.predio_id].manut  += leqs.filter(e=>e.status==='manutencao').length;
+    predioMap[l.predio_id].inativo+= leqs.filter(e=>e.status==='inativo'||e.status==='extraviado').length;
+    predioMap[l.predio_id].total  += leqs.length;
+  });
+  const predioList = Object.values(predioMap).filter(p=>p.total>0).sort((a,b)=>b.total-a.total);
+  const predioLabels = predioList.map(p=>p.nome);
+  const predioOp     = predioList.map(p=>p.op);
+  const predioManut  = predioList.map(p=>p.manut);
+  const predioInat   = predioList.map(p=>p.inativo);
 
   const criticalHTML = labRanking.length ? labRanking.map(l => {
     const pctColor = l.pct>80?'#2ecc71':l.pct>50?'#e67e22':'#c8102e';
@@ -991,7 +997,7 @@ async function renderDashboard() {
         <div class="dash-chart-box"><div class="chart-title">Equipamentos por Tipo</div><canvas id="chart-barras"></canvas></div>
       </div>
       <div class="dash-charts">
-        <div class="dash-chart-box dash-chart-full"><div class="chart-title">Manutenções por Mês</div><canvas id="chart-linha"></canvas></div>
+        <div class="dash-chart-box dash-chart-full"><div class="chart-title">Equipamentos por Prédio</div><canvas id="chart-predios"></canvas></div>
       </div>
       <div class="dash-charts" style="margin-top:0">
         <div class="dash-chart-box dash-chart-full" style="background:var(--bg2);border:1px solid var(--border)">
@@ -1023,8 +1029,26 @@ async function renderDashboard() {
   const ctxB = document.getElementById('chart-barras')?.getContext('2d');
   if (ctxB) _dashCharts.push(new Chart(ctxB, { type:'bar', data:{ labels:tipoLabels, datasets:[{ label:'Qtd', data:tipoVals, backgroundColor:'#c8102e', borderRadius:6, borderSkipped:false }] }, options:{ indexAxis:'y', plugins:{legend:{display:false}}, scales:{ x:{grid:{color:'#f0f0f0'},ticks:{stepSize:1}}, y:{grid:{display:false},ticks:{font:{size:11}}} }, animation:{duration:900} } }));
 
-  const ctxL = document.getElementById('chart-linha')?.getContext('2d');
-  if (ctxL) _dashCharts.push(new Chart(ctxL, { type:'line', data:{ labels:monthLabels, datasets:[{ label:'Manutenções', data:monthVals, borderColor:'#c8102e', backgroundColor:'rgba(200,16,46,0.08)', tension:0.4, fill:true, pointBackgroundColor:'#c8102e', pointRadius:5, pointHoverRadius:7 }] }, options:{ plugins:{legend:{display:false}}, scales:{ x:{grid:{display:false}}, y:{grid:{color:'#f0f0f0'},ticks:{stepSize:1},beginAtZero:true} }, animation:{duration:900} } }));
+  const ctxP = document.getElementById('chart-predios')?.getContext('2d');
+  if (ctxP) _dashCharts.push(new Chart(ctxP, {
+    type: 'bar',
+    data: {
+      labels: predioLabels,
+      datasets: [
+        { label:'Operacional', data:predioOp,    backgroundColor:'#2ecc71', borderRadius:4, borderSkipped:false },
+        { label:'Manutenção',  data:predioManut,  backgroundColor:'#e67e22', borderRadius:4, borderSkipped:false },
+        { label:'Inativo/Extraviado', data:predioInat, backgroundColor:'#c8102e', borderRadius:4, borderSkipped:false }
+      ]
+    },
+    options: {
+      plugins: { legend:{ position:'bottom', labels:{ boxWidth:12, padding:16, font:{size:12} } } },
+      scales: {
+        x: { stacked:true, grid:{ display:false } },
+        y: { stacked:true, grid:{ color:'rgba(255,255,255,0.05)' }, ticks:{ stepSize:10, color:'#888' }, beginAtZero:true }
+      },
+      animation:{ duration:900 }
+    }
+  }));
 }
 
 // ============================================================
