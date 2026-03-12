@@ -1952,7 +1952,6 @@ async function load3dData() {
 async function init3dPage() {
   document.getElementById('topbar-actions').innerHTML = `
     <div class="search-wrap-3d"><input type="text" id="global-search-3d-top" placeholder="Buscar patrimônio..." oninput="globalSearch3d(this.value)"/></div>
-    <button class="btn btn-red btn-sm" onclick="openAddModal3d()">＋ Equipamento</button>
   `;
 
   await load3dData();
