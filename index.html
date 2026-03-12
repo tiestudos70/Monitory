@@ -8,6 +8,8 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <style>
   :root {
     --red: #c8102e;
@@ -422,6 +424,9 @@
       <div class="nav-item" onclick="navTo('softwares')"><span class="icon">📦</span> Softwares</div>
       <div class="nav-section">Inventário</div>
       <div class="nav-item" onclick="navTo('inventario_aimores')"><span class="icon">📦</span> Inventário Aimorés</div>
+      <div class="nav-item" id="nav-alertas" onclick="navTo('alertas')"><span class="icon">🚨</span> Alertas <span id="alertas-badge" style="display:none;margin-left:auto;background:var(--red);color:#fff;border-radius:20px;font-size:10px;font-weight:700;padding:2px 7px;min-width:18px;text-align:center"></span></div>
+      <div class="nav-item" onclick="navTo('logs')"><span class="icon">📝</span> Logs de Acesso</div>
+      <div class="nav-item" onclick="navTo('importar_planilha')"><span class="icon">📤</span> Importar Planilha</div>
       <div class="nav-section">Sistema</div>
       <div class="nav-item" onclick="navTo('usuarios')"><span class="icon">👥</span> Usuários</div>
       <div class="nav-item" onclick="navTo('relatorios')"><span class="icon">📋</span> Relatórios</div>
@@ -649,11 +654,32 @@ async function doLogin() {
   }
   currentUser = data.user;
   await initApp();
+  // Registrar log de login
+  try {
+    await db.from('logs_acesso').insert({
+      usuario_id: data.user.id,
+      usuario_email: data.user.email,
+      acao: 'login',
+      detalhes: { ip: 'N/A', user_agent: navigator.userAgent.substring(0,120) }
+    });
+  } catch(e) { console.warn('Log não registrado:', e); }
 }
 
 async function doLogout() {
   realtimeChannels.forEach(ch => db.removeChannel(ch));
   realtimeChannels = [];
+  // Registrar log de logout
+  try {
+    if (currentUser) {
+      const { data:pf } = await db.from('perfis').select('nome').eq('id',currentUser.id).single();
+      await db.from('logs_acesso').insert({
+        usuario_id: currentUser.id,
+        usuario_email: currentUser.email,
+        usuario_nome: pf?.nome || null,
+        acao: 'logout'
+      });
+    }
+  } catch(e) { console.warn('Log logout:', e); }
   await db.auth.signOut();
   document.getElementById('app').style.display = 'none';
   document.getElementById('login-screen').style.display = 'flex';
@@ -676,6 +702,9 @@ async function initApp() {
   document.getElementById('app').style.display = 'block';
   setupRealtime();
   showPage('dashboard');
+  // Iniciar monitoramento de alertas
+  await checkAlertas();
+  setInterval(checkAlertas, 5 * 60 * 1000); // verifica a cada 5 minutos
 }
 
 (async () => {
@@ -730,7 +759,7 @@ function showPage(page) {
   document.querySelectorAll('.nav-item').forEach(el => {
     if (el.getAttribute('onclick')?.includes(`'${page}'`)) el.classList.add('active');
   });
-  const titles = { dashboard:'Dashboard', predios:'Prédios', laboratorios:'Laboratórios', lab3d:'Laboratórios 3D', equipamentos:'Equipamentos', manutencoes:'Manutenções', softwares:'Softwares', usuarios:'Usuários', relatorios:'Relatórios', inventario_aimores:'📦 Inventário Aimorés' };
+  const titles = { dashboard:'Dashboard', predios:'Prédios', laboratorios:'Laboratórios', lab3d:'Laboratórios 3D', equipamentos:'Equipamentos', manutencoes:'Manutenções', softwares:'Softwares', usuarios:'Usuários', relatorios:'Relatórios', inventario_aimores:'📦 Inventário Aimorés', alertas:'🚨 Central de Alertas', logs:'📝 Logs de Acesso', importar_planilha:'📤 Importar Planilha' };
   document.getElementById('page-title').textContent = titles[page] || page;
   document.getElementById('topbar-actions').innerHTML = '';
 
@@ -744,7 +773,7 @@ function showPage(page) {
   } else {
     contentEl.style.display = '';
     lab3dEl.classList.remove('visible');
-    const pages = { dashboard:renderDashboard, predios:renderPredios, laboratorios:renderLaboratorios, equipamentos:renderEquipamentos, manutencoes:renderManutencoes, softwares:renderSoftwares, usuarios:renderUsuarios, relatorios:renderRelatorios, inventario_aimores:renderInventarioAimores };
+    const pages = { dashboard:renderDashboard, predios:renderPredios, laboratorios:renderLaboratorios, equipamentos:renderEquipamentos, manutencoes:renderManutencoes, softwares:renderSoftwares, usuarios:renderUsuarios, relatorios:renderRelatorios, inventario_aimores:renderInventarioAimores, alertas:renderAlertas, logs:renderLogs, importar_planilha:renderImportarPlanilha };
     if (pages[page]) pages[page]();
   }
 }
@@ -1091,7 +1120,7 @@ async function renderEquipamentos() {
   const predioOpts = (predios||[]).map(p=>`<option value="${p.id}">${p.nome}</option>`).join('');
   const sem_pat_count = equipData.filter(e=>!e.patrimonio).length;
 
-  if (canEdit()) document.getElementById('topbar-actions').innerHTML = `<button class="btn btn-ghost btn-sm" onclick="exportCSV(equipData,'equipamentos.csv')">⬇ CSV</button><button class="btn btn-red" onclick="modalNovoEquip()">＋ Equipamento</button>`;
+  if (canEdit()) document.getElementById('topbar-actions').innerHTML = `<button class="btn btn-ghost btn-sm" onclick="exportCSV(equipData,'equipamentos.csv')">⬇ CSV</button><button class="btn btn-ghost btn-sm" onclick="exportPDF('equipamentos')">⬇ PDF</button><button class="btn btn-red" onclick="modalNovoEquip()">＋ Equipamento</button>`;
 
   const content = document.getElementById('page-content');
   content.innerHTML = `
@@ -1228,7 +1257,7 @@ async function renderManutencoes(){
   const {data:manut}=await db.from('manutencoes').select(`*, equipamentos(tipo,marca,modelo,patrimonio,laboratorio_id,laboratorios(numero,nome))`).order('aberto_em',{ascending:false});
   manutDataFull=manut||[];
   manutData=manut||[];
-  if(canEdit())document.getElementById('topbar-actions').innerHTML=`<button class="btn btn-ghost btn-sm" onclick="exportCSV(manutData,'manutencoes.csv')">⬇ CSV</button><button class="btn btn-red" onclick="modalNovaManutLivre()">＋ Chamado</button>`;
+  if(canEdit())document.getElementById('topbar-actions').innerHTML=`<button class="btn btn-ghost btn-sm" onclick="exportCSV(manutData,'manutencoes.csv')">⬇ CSV</button><button class="btn btn-ghost btn-sm" onclick="exportPDF('manutencoes')">⬇ PDF</button><button class="btn btn-red" onclick="modalNovaManutLivre()">＋ Chamado</button>`;
   const content=document.getElementById('page-content');
   const abertos=manutData.filter(m=>m.status!=='resolvido').length;
   content.innerHTML=`<div class="section-header"><div><div class="section-title">Manutenções</div><div class="section-sub" id="manut-count-sub">${abertos} abertos · ${manutData.length} total</div></div></div><div class="filter-bar"><div class="search-bar"><input id="manut-search" placeholder="Buscar..." oninput="filterManut()"/></div><select id="manut-status-filter" onchange="filterManut()"><option value="">Todos</option><option value="aberto">Aberto</option><option value="em_andamento">Em Andamento</option><option value="resolvido">Resolvido</option></select><select id="manut-prio-filter" onchange="filterManut()"><option value="">Prioridades</option><option value="critica">Crítica</option><option value="alta">Alta</option><option value="media">Média</option><option value="baixa">Baixa</option></select></div><div class="table-card"><div class="table-wrap"><table><thead><tr><th>Título</th><th>Equipamento</th><th>Lab</th><th>Status</th><th>Prioridade</th><th>Aberto</th><th>Resolvido</th><th></th></tr></thead><tbody id="manut-tbody"></tbody></table></div><div id="manut-pagination"></div></div>`;
@@ -1305,28 +1334,126 @@ async function updateManut(id){
 // ============================================================
 async function renderSoftwares(){
   setLoading();
-  const {data:sws}=await db.from('softwares').select(`*, laboratorios(nome,numero)`).order('nome');
-  if(canEdit())document.getElementById('topbar-actions').innerHTML=`<button class="btn btn-red" onclick="modalNovoSw()">＋ Software</button>`;
-  const rows=(sws||[]).map(s=>`<tr><td><strong>${s.nome}</strong></td><td class="td-mono">${s.versao||'—'}</td><td><span class="badge badge-blue">${s.licenca||'—'}</span></td><td>${s.laboratorios?`${s.laboratorios.numero} · ${s.laboratorios.nome}`:'—'}</td>${canEdit()?`<td><button class="btn btn-ghost btn-sm" onclick="deleteSw('${s.id}')">🗑</button></td>`:'<td></td>'}</tr>`).join('');
-  setContent(`<div class="section-header"><div><div class="section-title">Softwares</div><div class="section-sub">${sws?.length||0} registros</div></div></div><div class="table-card"><div class="table-wrap"><table><thead><tr><th>Nome</th><th>Versão</th><th>Licença</th><th>Laboratório</th><th></th></tr></thead><tbody>${rows||'<tr><td colspan="5"><div class="empty-state"><div class="es-icon">📦</div><h3>Nenhum software</h3><p>Cadastre softwares por laboratório</p>'+(canEdit()?'<br><button class="btn btn-red btn-sm" style="margin-top:12px" onclick="modalNovoSw()">＋ Novo Software</button>':'')+'</div></td></tr>'}</tbody></table></div></div>`);
+  const [{data:sws},{data:labs}] = await Promise.all([
+    db.from('softwares').select(`*, laboratorios(nome,numero), equipamentos(marca,modelo,patrimonio)`).order('nome'),
+    db.from('laboratorios').select('*').order('numero')
+  ]);
+  const actions = canEdit() ? `<button class="btn btn-ghost btn-sm" onclick="exportPDF('softwares')">⬇ PDF</button><button class="btn btn-red" onclick="modalNovoSw()">＋ Software</button>` : `<button class="btn btn-ghost btn-sm" onclick="exportPDF('softwares')">⬇ PDF</button>`;
+  if(canEdit()) document.getElementById('topbar-actions').innerHTML = actions;
+
+  // Agrupar por laboratório
+  const porLab = {};
+  (sws||[]).forEach(s => {
+    const labId = s.laboratorio_id || (s.equipamentos ? 'equip_'+s.equipamento_id : 'sem_lab');
+    if (!porLab[labId]) porLab[labId] = { nome: s.laboratorios ? `${s.laboratorios.numero} · ${s.laboratorios.nome}` : (s.equipamento_id ? '🖥 Por Máquina' : '—'), items:[] };
+    porLab[labId].items.push(s);
+  });
+
+  // Cursos distintos
+  const cursos = [...new Set((sws||[]).map(s=>s.curso).filter(Boolean))].sort();
+  const cursoOpts = `<option value="">Todos os cursos</option>${cursos.map(c=>`<option value="${c}">${c}</option>`).join('')}`;
+  const labOpts2 = `<option value="">Todos os labs</option>${(labs||[]).map(l=>`<option value="${l.id}">${l.numero} · ${l.nome}</option>`).join('')}`;
+
+  const rows = (sws||[]).map(s => {
+    const labNome = s.laboratorios ? `${s.laboratorios.numero} · ${s.laboratorios.nome}` : '—';
+    const maqNome = s.equipamentos ? `🖥 ${s.equipamentos.marca||''} ${s.equipamentos.modelo||''} (${s.equipamentos.patrimonio||'s/pat'})` : '—';
+    return `<tr class="sw-row" data-lab="${s.laboratorio_id||''}" data-curso="${s.curso||''}" data-equip="${s.equipamento_id||''}">
+      <td><strong>${s.nome}</strong>${s.descricao?`<br><small style="color:var(--text2)">${s.descricao}</small>`:''}  </td>
+      <td class="td-mono">${s.versao||'—'}</td>
+      <td><span class="badge badge-blue">${s.licenca||'—'}</span></td>
+      <td style="font-size:12px">${labNome}</td>
+      <td style="font-size:12px">${maqNome}</td>
+      <td><span class="badge badge-green" style="${!s.curso?'display:none':''}">${s.curso||''}</span></td>
+      ${canEdit()?`<td><button class="btn btn-ghost btn-sm" onclick="deleteSw('${s.id}')">🗑</button></td>`:'<td></td>'}
+    </tr>`;
+  }).join('');
+
+  setContent(`
+    <div class="section-header">
+      <div><div class="section-title">Softwares</div><div class="section-sub">${sws?.length||0} registros</div></div>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">
+      <select id="sw-fil-lab" onchange="filtrarSoftwares()" style="background:var(--bg2);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:8px;font-size:13px">${labOpts2}</select>
+      <select id="sw-fil-curso" onchange="filtrarSoftwares()" style="background:var(--bg2);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:8px;font-size:13px">${cursoOpts}</select>
+      <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2)">
+        <input type="checkbox" id="sw-fil-equip" onchange="filtrarSoftwares()"> Apenas por máquina
+      </label>
+    </div>
+    <div class="table-card"><div class="table-wrap">
+      <table id="sw-table"><thead><tr><th>Nome</th><th>Versão</th><th>Licença</th><th>Laboratório</th><th>Máquina</th><th>Curso</th><th></th></tr></thead>
+      <tbody id="sw-tbody">${rows||`<tr><td colspan="7"><div class="empty-state"><div class="es-icon">📦</div><h3>Nenhum software</h3><p>Cadastre softwares por laboratório ou máquina</p>${canEdit()?'<br><button class="btn btn-red btn-sm" style="margin-top:12px" onclick="modalNovoSw()">＋ Novo Software</button>':''}</div></td></tr>`}</tbody>
+      </table>
+    </div></div>`);
 }
+
+function filtrarSoftwares(){
+  const lab = document.getElementById('sw-fil-lab')?.value||'';
+  const curso = document.getElementById('sw-fil-curso')?.value||'';
+  const soEquip = document.getElementById('sw-fil-equip')?.checked;
+  document.querySelectorAll('#sw-tbody .sw-row').forEach(tr=>{
+    let show = true;
+    if (lab && tr.dataset.lab !== lab) show=false;
+    if (curso && tr.dataset.curso !== curso) show=false;
+    if (soEquip && !tr.dataset.equip) show=false;
+    tr.style.display = show ? '' : 'none';
+  });
+}
+
 async function modalNovoSw(){
-  const {data:labs}=await db.from('laboratorios').select('*').order('numero');
+  const [{data:labs},{data:equips}] = await Promise.all([
+    db.from('laboratorios').select('*').order('numero'),
+    db.from('equipamentos').select('id,marca,modelo,patrimonio,laboratorio_id').order('marca')
+  ]);
   const labOpts=(labs||[]).map(l=>`<option value="${l.id}">${l.numero} · ${l.nome}</option>`).join('');
-  openModal('Novo Software',`<div class="form-row"><div class="form-field"><label>Nome *</label><input id="ns-nome"/></div><div class="form-field"><label>Versão</label><input id="ns-ver"/></div></div><div class="form-row"><div class="form-field"><label>Licença</label><select id="ns-lic"><option value="gratuito">Gratuito</option><option value="licenciado">Licenciado</option><option value="educacional">Educacional</option><option value="trial">Trial</option></select></div><div class="form-field"><label>Laboratório *</label><select id="ns-lab"><option value="">Selecione</option>${labOpts}</select></div></div>`,`<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-red" onclick="saveSw()">Salvar</button>`);
+  const equipOpts=(equips||[]).map(e=>`<option value="${e.id}">${e.marca||''} ${e.modelo||''} — ${e.patrimonio||'s/pat'}</option>`).join('');
+  openModal('Novo Software',`
+    <div class="form-row">
+      <div class="form-field"><label>Nome *</label><input id="ns-nome"/></div>
+      <div class="form-field"><label>Versão</label><input id="ns-ver"/></div>
+    </div>
+    <div class="form-row">
+      <div class="form-field"><label>Licença</label>
+        <select id="ns-lic"><option value="gratuito">Gratuito</option><option value="licenciado">Licenciado</option><option value="educacional">Educacional</option><option value="trial">Trial</option></select>
+      </div>
+      <div class="form-field"><label>Curso destinado</label><input id="ns-curso" placeholder="Ex: Ciência da Computação"/></div>
+    </div>
+    <div class="form-row">
+      <div class="form-field"><label>Laboratório</label><select id="ns-lab"><option value="">— nenhum —</option>${labOpts}</select></div>
+      <div class="form-field"><label>Máquina específica (opcional)</label><select id="ns-equip"><option value="">— nenhuma —</option>${equipOpts}</select></div>
+    </div>
+    <div class="form-field"><label>Descrição</label><input id="ns-desc" placeholder="Breve descrição do software"/></div>
+    <p style="font-size:11px;color:var(--text2);margin-top:8px">💡 Vincule ao Laboratório para indicar que está em todos as máquinas, ou a uma Máquina específica.</p>
+  `,`<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-red" onclick="saveSw()">Salvar</button>`);
 }
+
 async function saveSw(){
-  const nome=document.getElementById('ns-nome').value.trim(),laboratorio_id=document.getElementById('ns-lab').value;
-  if(!nome||!laboratorio_id){toast('Preencha nome e laboratório','error');return;}
-  const {error}=await db.from('softwares').insert({nome,versao:document.getElementById('ns-ver').value||null,licenca:document.getElementById('ns-lic').value,laboratorio_id});
+  const nome=document.getElementById('ns-nome').value.trim();
+  const laboratorio_id=document.getElementById('ns-lab').value||null;
+  const equipamento_id=document.getElementById('ns-equip').value||null;
+  if(!nome){toast('Preencha o nome do software','error');return;}
+  if(!laboratorio_id && !equipamento_id){toast('Selecione um laboratório ou uma máquina','error');return;}
+  const {error}=await db.from('softwares').insert({
+    nome,
+    versao:document.getElementById('ns-ver').value||null,
+    licenca:document.getElementById('ns-lic').value,
+    curso:document.getElementById('ns-curso').value||null,
+    descricao:document.getElementById('ns-desc').value||null,
+    laboratorio_id,
+    equipamento_id
+  });
   if(error){toast(error.message,'error');return;}
+  // Log
+  try { await db.from('logs_acesso').insert({usuario_id:currentUser.id,usuario_email:currentUser.email,acao:'criar',tabela:'softwares',detalhes:{nome}}); } catch(e){}
   toast('Software cadastrado!');closeModal();renderSoftwares();
 }
+
 async function deleteSw(id){
-  if(!confirm('Excluir?'))return;
+  if(!confirm('Excluir este software?'))return;
   await db.from('softwares').delete().eq('id',id);
+  try { await db.from('logs_acesso').insert({usuario_id:currentUser.id,usuario_email:currentUser.email,acao:'excluir',tabela:'softwares',registro_id:id}); } catch(e){}
   toast('Removido!','info');renderSoftwares();
 }
+
 
 // ============================================================
 // USUÁRIOS
@@ -1491,7 +1618,7 @@ async function renderRelatorios(){
   const statusRows=Object.entries(byStatus).map(([k,v])=>`<tr><td>${k}</td><td class="td-mono">${v}</td><td>${Math.round(v/(equips?.length||1)*100)}%</td></tr>`).join('');
   const tipoRows=Object.entries(byTipo).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<tr><td>${k}</td><td class="td-mono">${v}</td></tr>`).join('');
 
-  document.getElementById('topbar-actions').innerHTML = `<button class="btn btn-green" onclick="exportRelatorio()">⬇ Exportar CSV</button>`;
+  document.getElementById('topbar-actions').innerHTML = `<button class="btn btn-ghost btn-sm" onclick="exportRelatorio()">⬇ CSV</button><button class="btn btn-ghost btn-sm" onclick="exportPDF('relatorio')">⬇ PDF</button>`;
 
   setContent(`<div class="section-header"><div><div class="section-title">Relatórios</div><div class="section-sub">Visão analítica</div></div></div>
     <div class="stat-grid" style="margin-bottom:24px">
@@ -1896,7 +2023,7 @@ function show3dTooltip(e, equip) {
 function hide3dTooltip() { document.getElementById('tooltip3d')?.classList.remove('show'); }
 
 // ─── DETAIL PANEL ───
-function open3dDetail(equip) {
+async function open3dDetail(equip) {
   lab3dState.selectedEquip = equip;
   draw3dLab();
   const st=equip.status;
@@ -1904,6 +2031,25 @@ function open3dDetail(equip) {
   const labels={operacional:'Operacional',manutencao:'Em Manutenção',inativo:'Inativo',extraviado:'Extraviado'};
   const lab=lab3dState.laboratorios.find(l=>l.id===equip.laboratorio_id);
   const predio=lab3dState.predios.find(p=>p.id===lab?.predio_id);
+
+  // Buscar softwares da máquina E do lab
+  let swMaq=[], swLab=[];
+  try {
+    const r1 = await db.from('softwares').select('*').eq('equipamento_id', equip.id);
+    swMaq = r1.data||[];
+    if(lab?.id){
+      const r2 = await db.from('softwares').select('*').eq('laboratorio_id', lab.id).is('equipamento_id', null);
+      swLab = r2.data||[];
+    }
+  } catch(e){}
+
+  const swBlock = (list, titulo, cor) => !list.length ? '' : `
+    <div class="dp-section">
+      <div class="dp-section-title">${titulo}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:6px">
+        ${list.map(s=>`<span style="background:${cor}18;color:${cor};border-radius:12px;padding:3px 9px;font-size:11px;font-weight:600">${s.nome}${s.versao?' '+s.versao:''}</span>`).join('')}
+      </div>
+    </div>`;
 
   document.getElementById('dp-body-3d').innerHTML = `
     <div class="status-bar">
@@ -1930,16 +2076,51 @@ function open3dDetail(equip) {
         ${equip.sistema_operacional?`<div class="dp-field full"><div class="df-label">S.O.</div><div class="df-value">${equip.sistema_operacional}</div></div>`:''}
       </div>
     </div>`:''}
+    ${swBlock(swMaq,'💿 Softwares desta Máquina','#00e676')}
+    ${swBlock(swLab,'📦 Softwares do Laboratório','#6699ff')}
+    ${(!swMaq.length&&!swLab.length)?'<div class="dp-section"><div style="color:var(--text2);font-size:12px;text-align:center;padding:8px 0">⚠️ Nenhum software cadastrado</div></div>':''}
     ${equip.observacao?`<div class="dp-section"><div class="dp-section-title">Observações</div><div class="dp-field full"><div class="df-value" style="font-weight:400;color:var(--text2)">${equip.observacao}</div></div></div>`:''}
     <div class="dp-actions">
       <button class="btn btn-ghost" onclick="open3dEditStatus('${equip.id}')">🔄 Alterar Status</button>
       ${canEdit()?`<button class="btn btn-ghost" onclick="closeDetail3d();modalNovaManut('${equip.id}')">🔧 Abrir Chamado</button>`:''}
       <button class="btn btn-ghost" onclick="closeDetail3d();verHistoricoEquip('${equip.id}')">📋 Histórico</button>
       <button class="btn btn-ghost" onclick="showQR('${equip.id}','${equip.patrimonio||equip.id}')">📱 Gerar QR Code</button>
+      ${canEdit()?`<button class="btn btn-ghost" onclick="modalAddSwMaquina('${equip.id}','${equip.laboratorio_id||''}')">＋ Software</button>`:''}
     </div>`;
 
   document.getElementById('detail-panel').classList.add('open');
   document.getElementById('zoom-controls-3d')?.classList.add('right-offset');
+}
+
+async function modalAddSwMaquina(equipId, labId) {
+  openModal('Adicionar Software à Máquina',`
+    <div class="form-row">
+      <div class="form-field"><label>Nome *</label><input id="asm-nome"/></div>
+      <div class="form-field"><label>Versão</label><input id="asm-ver"/></div>
+    </div>
+    <div class="form-row">
+      <div class="form-field"><label>Licença</label>
+        <select id="asm-lic"><option value="gratuito">Gratuito</option><option value="licenciado">Licenciado</option><option value="educacional">Educacional</option><option value="trial">Trial</option></select>
+      </div>
+      <div class="form-field"><label>Curso</label><input id="asm-curso" placeholder="Ex: Análise de Sistemas"/></div>
+    </div>
+  `,`<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+     <button class="btn btn-red" onclick="saveSwMaquina('${equipId}','${labId}')">Salvar</button>`);
+}
+
+async function saveSwMaquina(equipId, labId) {
+  const nome = document.getElementById('asm-nome').value.trim();
+  if(!nome){toast('Preencha o nome','error');return;}
+  const {error} = await db.from('softwares').insert({
+    nome, versao:document.getElementById('asm-ver').value||null,
+    licenca:document.getElementById('asm-lic').value,
+    curso:document.getElementById('asm-curso').value||null,
+    equipamento_id:equipId, laboratorio_id:labId||null
+  });
+  if(error){toast(error.message,'error');return;}
+  toast('Software adicionado!');closeModal();
+  const equip = lab3dState.equipamentos.find(e=>e.id===equipId);
+  if(equip) open3dDetail(equip);
 }
 
 function closeDetail3d() {
@@ -2798,6 +2979,590 @@ async function aimDoImport() {
   closeModal();
   if (errors) toast(`Importação concluída com erros. ${total} equipamentos inseridos.`, 'info');
   else toast(`✅ ${total} equipamentos importados com sucesso!`, 'success');
+}
+
+// ============================================================
+// ███████╗  ALERTAS AUTOMÁTICOS
+// ============================================================
+
+async function checkAlertas() {
+  try {
+    // Gerar alertas automaticamente com base nos dados do sistema
+    const [{data:labs},{data:equips},{data:mauts},{data:sws}] = await Promise.all([
+      db.from('laboratorios').select('id,numero,nome,andar'),
+      db.from('equipamentos').select('id,status,laboratorio_id'),
+      db.from('manutencoes').select('id,status,prioridade,equipamento_id,laboratorio_id').in('status',['aberto','em_andamento']),
+      db.from('softwares').select('id,laboratorio_id').is('equipamento_id',null)
+    ]);
+
+    const labsComSw = new Set((sws||[]).map(s=>s.laboratorio_id));
+    const alertasParaGerar = [];
+
+    for (const lab of (labs||[])) {
+      const equipLab = (equips||[]).filter(e=>e.laboratorio_id===lab.id);
+      const mautLab  = (mauts||[]).filter(m=>m.laboratorio_id===lab.id);
+      const inativas = equipLab.filter(e=>['inativo','extraviado'].includes(e.status));
+
+      // Lab sem softwares cadastrados
+      if (equipLab.length > 0 && !labsComSw.has(lab.id)) {
+        alertasParaGerar.push({
+          tipo:'sem_software', prioridade:'media',
+          titulo:`${lab.numero} — Sem softwares cadastrados`,
+          descricao:`O laboratório ${lab.numero} (${lab.nome}) não possui softwares registrados no sistema.`,
+          laboratorio_id: lab.id
+        });
+      }
+      // Manutenções críticas pendentes
+      const mautCritica = mautLab.filter(m=>m.prioridade==='critica');
+      if (mautCritica.length > 0) {
+        alertasParaGerar.push({
+          tipo:'manutencao_pendente', prioridade:'critica',
+          titulo:`${lab.numero} — ${mautCritica.length} manutenção(ões) CRÍTICA(S) pendente(s)`,
+          descricao:`Existem ${mautCritica.length} chamado(s) crítico(s) não resolvidos neste laboratório.`,
+          laboratorio_id: lab.id
+        });
+      }
+      // Equipamentos inativos/extraviados
+      if (inativas.length > 0) {
+        alertasParaGerar.push({
+          tipo:'equipamento_inativo', prioridade:'alta',
+          titulo:`${lab.numero} — ${inativas.length} equipamento(s) inativo(s)/extraviado(s)`,
+          descricao:`${inativas.filter(e=>e.status==='inativo').length} inativo(s), ${inativas.filter(e=>e.status==='extraviado').length} extraviado(s).`,
+          laboratorio_id: lab.id
+        });
+      }
+    }
+
+    // Upsert alertas (limpar os ativos automaticamente gerados e reinserir)
+    await db.from('alertas').delete().match({status:'ativo'});
+    if (alertasParaGerar.length > 0) {
+      await db.from('alertas').insert(alertasParaGerar);
+    }
+
+    // Atualizar badge no sidebar
+    const { data: ativos } = await db.from('alertas').select('id').eq('status','ativo');
+    const badge = document.getElementById('alertas-badge');
+    if (badge) {
+      const n = ativos?.length || 0;
+      badge.textContent = n > 99 ? '99+' : n;
+      badge.style.display = n > 0 ? 'inline-block' : 'none';
+    }
+  } catch(e) { console.warn('checkAlertas:', e); }
+}
+
+async function renderAlertas() {
+  setLoading();
+  await checkAlertas();
+  const { data: alertas } = await db.from('alertas')
+    .select(`*, laboratorios(numero,nome,andar), equipamentos(marca,modelo,patrimonio)`)
+    .order('prioridade', {ascending:false})
+    .order('criado_em', {ascending:false});
+
+  document.getElementById('topbar-actions').innerHTML = `
+    <button class="btn btn-ghost btn-sm" onclick="checkAlertas().then(renderAlertas)">🔄 Verificar Agora</button>
+    <button class="btn btn-ghost btn-sm" onclick="resolverTodosAlertas()">✅ Resolver Todos</button>`;
+
+  const prioColor = {baixa:'#6699ff',media:'var(--orange)',alta:'#ff6b8a',critica:'var(--red)'};
+  const prioLabel = {baixa:'Baixa',media:'Média',alta:'Alta',critica:'🔴 Crítica'};
+  const tipoIcon  = {sem_software:'📦',sem_rede:'📡',manutencao_pendente:'🔧',equipamento_inativo:'⛔',equipamento_extraviado:'🔴'};
+
+  const ativos   = (alertas||[]).filter(a=>a.status==='ativo');
+  const resolvidos=(alertas||[]).filter(a=>a.status==='resolvido');
+
+  if (!alertas?.length) {
+    setContent(`<div class="empty-state"><div class="es-icon">✅</div><h3>Nenhum alerta</h3><p>Todos os laboratórios estão operando normalmente!</p></div>`);
+    return;
+  }
+
+  const renderCard = (a) => {
+    const cor = prioColor[a.prioridade]||'var(--text2)';
+    const labLink = a.laboratorio_id ? `onclick="navTo('lab3d');setTimeout(()=>select3dLab('${a.laboratorio_id}'),400)"` : '';
+    return `<div class="table-card" style="margin-bottom:10px;border-left:3px solid ${cor};cursor:${a.laboratorio_id?'pointer':'default'}" ${labLink}>
+      <div style="display:flex;align-items:flex-start;gap:14px;padding:14px 18px">
+        <div style="font-size:24px">${tipoIcon[a.tipo]||'⚠️'}</div>
+        <div style="flex:1">
+          <div style="font-size:14px;font-weight:700;color:${cor}">${a.titulo}</div>
+          <div style="font-size:12px;color:var(--text2);margin-top:4px">${a.descricao||''}</div>
+          ${a.laboratorios?`<div style="font-size:11px;color:var(--text2);margin-top:6px">📍 ${a.laboratorios.numero} — ${a.laboratorios.nome} · Andar ${a.laboratorios.andar}</div>`:''}
+          <div style="font-size:11px;color:var(--text2);margin-top:3px">🕐 ${new Date(a.criado_em).toLocaleString('pt-BR')}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
+          <span style="background:${cor}18;color:${cor};border-radius:20px;font-size:10px;font-weight:700;padding:3px 10px">${prioLabel[a.prioridade]||a.prioridade}</span>
+          ${a.laboratorio_id?`<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();navTo('lab3d');setTimeout(()=>select3dLab('${a.laboratorio_id}'),400)">🔍 Ver Lab</button>`:''}
+          ${canEdit()&&a.status==='ativo'?`<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();resolverAlerta('${a.id}')">✅ Resolver</button>`:''}
+        </div>
+      </div>
+    </div>`;
+  };
+
+  setContent(`
+    <div class="section-header" style="margin-bottom:16px">
+      <div>
+        <div class="section-title">Central de Alertas</div>
+        <div class="section-sub">${ativos.length} ativo(s) · ${resolvidos.length} resolvido(s)</div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:20px">
+      ${[
+        {label:'Críticos',v:ativos.filter(a=>a.prioridade==='critica').length,cor:'var(--red)'},
+        {label:'Alta prioridade',v:ativos.filter(a=>a.prioridade==='alta').length,cor:'#ff6b8a'},
+        {label:'Média prioridade',v:ativos.filter(a=>a.prioridade==='media').length,cor:'var(--orange)'},
+        {label:'Resolvidos',v:resolvidos.length,cor:'var(--green)'}
+      ].map(s=>`<div class="stat-card" style="border-left:3px solid ${s.cor}"><div class="stat-number" style="color:${s.cor}">${s.v}</div><div class="stat-label">${s.label}</div></div>`).join('')}
+    </div>
+    ${ativos.length ? `<div style="font-size:13px;font-weight:700;color:var(--text2);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.05em">🚨 Alertas Ativos</div>${ativos.map(renderCard).join('')}` : ''}
+    ${resolvidos.length ? `<div style="font-size:13px;font-weight:700;color:var(--text2);margin:20px 0 10px;text-transform:uppercase;letter-spacing:0.05em">✅ Resolvidos</div>${resolvidos.slice(0,10).map(renderCard).join('')}` : ''}
+  `);
+}
+
+async function resolverAlerta(id) {
+  await db.from('alertas').update({status:'resolvido',resolvido_em:new Date().toISOString(),resolvido_por:currentUser.id}).eq('id',id);
+  toast('Alerta resolvido!','success');
+  renderAlertas();
+}
+
+async function resolverTodosAlertas() {
+  if(!confirm('Marcar todos os alertas ativos como resolvidos?')) return;
+  await db.from('alertas').update({status:'resolvido',resolvido_em:new Date().toISOString(),resolvido_por:currentUser.id}).eq('status','ativo');
+  toast('Todos os alertas resolvidos!','success');
+  renderAlertas();
+}
+
+// ============================================================
+// ███████╗  LOGS DE ACESSO
+// ============================================================
+
+async function renderLogs() {
+  setLoading();
+  if(!isAdmin()){
+    setContent('<div class="empty-state"><div class="es-icon">🔒</div><h3>Acesso Restrito</h3><p>Apenas administradores podem visualizar os logs.</p></div>');
+    return;
+  }
+
+  const { data: logs } = await db.from('logs_acesso')
+    .select('*')
+    .order('criado_em', {ascending: false})
+    .limit(200);
+
+  document.getElementById('topbar-actions').innerHTML = `
+    <button class="btn btn-ghost btn-sm" onclick="exportCSV(logs_cache,'logs_acesso.csv')">⬇ CSV</button>
+    <button class="btn btn-ghost btn-sm" onclick="exportPDF('logs')">⬇ PDF</button>`;
+
+  window.logs_cache = logs||[];
+
+  const acaoIcon = {login:'🔑',logout:'🚪',criar:'➕',editar:'✏️',excluir:'🗑',visualizar:'👁'};
+  const acaoCor  = {login:'var(--green)',logout:'var(--text2)',criar:'#6699ff',editar:'var(--orange)',excluir:'var(--red)',visualizar:'var(--text2)'};
+
+  // Filtros
+  const usuarios = [...new Set((logs||[]).map(l=>l.usuario_email).filter(Boolean))];
+  const acoes    = [...new Set((logs||[]).map(l=>l.acao).filter(Boolean))];
+
+  const rows = (logs||[]).map(l => {
+    const cor = acaoCor[l.acao]||'var(--text2)';
+    const det = l.detalhes ? JSON.stringify(l.detalhes).substring(0,80) : '—';
+    return `<tr>
+      <td style="white-space:nowrap;font-size:12px">${new Date(l.criado_em).toLocaleString('pt-BR')}</td>
+      <td><div style="font-size:13px;font-weight:600">${l.usuario_nome||'—'}</div><div style="font-size:11px;color:var(--text2)">${l.usuario_email||'—'}</div></td>
+      <td><span style="background:${cor}18;color:${cor};border-radius:12px;padding:3px 9px;font-size:11px;font-weight:700">${acaoIcon[l.acao]||'•'} ${l.acao||'—'}</span></td>
+      <td style="font-size:12px">${l.tabela||'—'}</td>
+      <td style="font-size:11px;color:var(--text2);max-width:200px;overflow:hidden;text-overflow:ellipsis">${det}</td>
+    </tr>`;
+  }).join('');
+
+  // Stats rápidas
+  const logins = (logs||[]).filter(l=>l.acao==='login').length;
+  const hoje = new Date().toDateString();
+  const hoje_count = (logs||[]).filter(l=>new Date(l.criado_em).toDateString()===hoje).length;
+
+  setContent(`
+    <div class="section-header" style="margin-bottom:16px">
+      <div><div class="section-title">Logs de Acesso</div><div class="section-sub">Últimas ${logs?.length||0} ações · auditoria completa</div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px">
+      ${[
+        {label:'Total',v:logs?.length||0,cor:'var(--blue)'},
+        {label:'Logins',v:logins,cor:'var(--green)'},
+        {label:'Hoje',v:hoje_count,cor:'var(--orange)'},
+        {label:'Usuários únicos',v:usuarios.length,cor:'#6699ff'}
+      ].map(s=>`<div class="stat-card"><div class="stat-number" style="color:${s.cor}">${s.v}</div><div class="stat-label">${s.label}</div></div>`).join('')}
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+      <select id="log-fil-user" onchange="filtrarLogs()" style="background:var(--bg2);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:8px;font-size:13px">
+        <option value="">Todos os usuários</option>
+        ${usuarios.map(u=>`<option value="${u}">${u}</option>`).join('')}
+      </select>
+      <select id="log-fil-acao" onchange="filtrarLogs()" style="background:var(--bg2);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:8px;font-size:13px">
+        <option value="">Todas as ações</option>
+        ${acoes.map(a=>`<option value="${a}">${acaoIcon[a]||''} ${a}</option>`).join('')}
+      </select>
+    </div>
+    <div class="table-card"><div class="table-wrap">
+      <table id="log-table"><thead><tr><th>Data/Hora</th><th>Usuário</th><th>Ação</th><th>Tabela</th><th>Detalhes</th></tr></thead>
+      <tbody id="log-tbody">${rows||'<tr><td colspan="5"><div class="empty-state"><div class="es-icon">📝</div><h3>Nenhum log</h3><p>As ações serão registradas aqui automaticamente</p></div></td></tr>'}</tbody>
+      </table>
+    </div></div>`);
+}
+
+function filtrarLogs() {
+  const user = document.getElementById('log-fil-user')?.value||'';
+  const acao = document.getElementById('log-fil-acao')?.value||'';
+  document.querySelectorAll('#log-tbody tr').forEach(tr => {
+    const cells = tr.querySelectorAll('td');
+    if(!cells.length) return;
+    let show = true;
+    if (user && !cells[1]?.textContent.includes(user)) show=false;
+    if (acao && !cells[2]?.textContent.includes(acao)) show=false;
+    tr.style.display = show ? '' : 'none';
+  });
+}
+
+// ============================================================
+// ███████╗  IMPORTAR PLANILHA (CSV / XLSX genérico)
+// ============================================================
+
+async function renderImportarPlanilha() {
+  setLoading();
+  if(!canEdit()){
+    setContent('<div class="empty-state"><div class="es-icon">🔒</div><h3>Acesso Restrito</h3><p>Apenas administradores e técnicos podem importar dados.</p></div>');
+    return;
+  }
+  const { data: labs } = await db.from('laboratorios').select('*').order('numero');
+  const labOpts = (labs||[]).map(l=>`<option value="${l.id}">${l.numero} · ${l.nome}</option>`).join('');
+
+  setContent(`
+    <div class="section-header" style="margin-bottom:16px">
+      <div><div class="section-title">Importar Planilha</div><div class="section-sub">Importe equipamentos a partir de um arquivo CSV ou Excel</div></div>
+    </div>
+    <div class="table-card" style="padding:24px;max-width:700px">
+      <h3 style="font-size:15px;font-weight:700;margin-bottom:16px">📤 Importar Inventário</h3>
+
+      <div class="form-row" style="margin-bottom:16px">
+        <div class="form-field">
+          <label>Arquivo CSV ou Excel (.csv, .xlsx) *</label>
+          <input type="file" id="imp-file" accept=".csv,.xlsx,.xls" onchange="previewPlanilha()" style="background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:8px;border-radius:8px;width:100%"/>
+        </div>
+        <div class="form-field">
+          <label>Laboratório destino *</label>
+          <select id="imp-lab" style="width:100%"><option value="">— selecione —</option>${labOpts}</select>
+        </div>
+      </div>
+
+      <div style="background:var(--bg3);border-radius:8px;padding:12px;margin-bottom:16px;font-size:12px;color:var(--text2)">
+        <strong style="color:var(--text)">📋 Colunas esperadas no CSV/Excel:</strong><br><br>
+        <code style="color:var(--green)">patrimonio, modelo, marca, numero_serie, processador, ram_gb, armazenamento_gb, sistema_operacional, tipo, status, observacao</code><br><br>
+        Campos obrigatórios: <strong>modelo</strong> ou <strong>patrimonio</strong>. Os demais são opcionais.<br>
+        Status válidos: <code>operacional, manutencao, inativo, extraviado</code> (padrão: operacional)<br>
+        Tipo válido: <code>computador, notebook, servidor, impressora, projetor, outro</code> (padrão: computador)
+      </div>
+
+      <div id="imp-preview" style="display:none;margin-bottom:16px">
+        <div style="font-size:13px;font-weight:700;margin-bottom:10px" id="imp-preview-title"></div>
+        <div class="table-wrap" style="max-height:300px;overflow-y:auto">
+          <table id="imp-preview-table"><thead></thead><tbody></tbody></table>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-ghost" onclick="document.getElementById('imp-file').value='';document.getElementById('imp-preview').style.display='none'">🗑 Limpar</button>
+        <button class="btn btn-red" onclick="executarImportacao()">📥 Importar Equipamentos</button>
+      </div>
+    </div>
+
+    <div class="table-card" style="padding:24px;max-width:700px;margin-top:16px">
+      <h3 style="font-size:15px;font-weight:700;margin-bottom:12px">💡 Exemplo de arquivo CSV</h3>
+      <pre style="background:var(--bg3);padding:12px;border-radius:8px;font-size:11px;color:var(--green);overflow-x:auto">patrimonio,modelo,marca,numero_serie,processador,ram_gb,armazenamento_gb,sistema_operacional,tipo,status
+403209,Optiplex 3040,Dell,8CGKHJ2,Intel Core i5-6500,8,500,Windows 10 Education,computador,operacional
+403111,Optiplex 3040,Dell,8CDSHJ2,Intel Core i5-6500,8,500,Windows 10 Education,computador,operacional</pre>
+      <button class="btn btn-ghost btn-sm" style="margin-top:10px" onclick="baixarTemplateCSV()">⬇ Baixar template CSV</button>
+    </div>`);
+}
+
+let impData = [];
+
+async function previewPlanilha() {
+  const file = document.getElementById('imp-file').files[0];
+  if (!file) return;
+  const ext = file.name.split('.').pop().toLowerCase();
+
+  try {
+    let rows = [];
+    if (ext === 'csv') {
+      const text = await file.text();
+      const lines = text.split(/\r?\n/).filter(l=>l.trim());
+      const sep = lines[0].includes(';') ? ';' : ',';
+      const headers = lines[0].split(sep).map(h=>h.replace(/"/g,'').trim().toLowerCase());
+      rows = lines.slice(1).map(line => {
+        const vals = line.split(sep).map(v=>v.replace(/"/g,'').trim());
+        const obj = {};
+        headers.forEach((h,i) => obj[h] = vals[i]||'');
+        return obj;
+      });
+    } else {
+      toast('Para Excel, converta para CSV antes de importar. Use Arquivo → Salvar como → CSV.','info');
+      return;
+    }
+
+    impData = rows.filter(r => r.modelo || r.patrimonio);
+    const preview = document.getElementById('imp-preview');
+    const previewTitle = document.getElementById('imp-preview-title');
+    const table = document.getElementById('imp-preview-table');
+
+    if (!impData.length) { toast('Nenhuma linha válida encontrada','error'); return; }
+
+    const cols = Object.keys(impData[0]);
+    table.querySelector('thead').innerHTML = `<tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr>`;
+    table.querySelector('tbody').innerHTML = impData.slice(0,10).map(r=>`<tr>${cols.map(c=>`<td style="font-size:11px">${r[c]||'—'}</td>`).join('')}</tr>`).join('');
+
+    previewTitle.textContent = `✅ ${impData.length} linha(s) detectada(s) — pré-visualização das primeiras 10:`;
+    preview.style.display = 'block';
+  } catch(e) {
+    toast('Erro ao ler arquivo: ' + e.message, 'error');
+  }
+}
+
+async function executarImportacao() {
+  const labId = document.getElementById('imp-lab').value;
+  if (!labId) { toast('Selecione o laboratório destino','error'); return; }
+  if (!impData.length) { toast('Selecione e pré-visualize um arquivo primeiro','error'); return; }
+  if (!confirm(`Importar ${impData.length} equipamentos para o laboratório selecionado?`)) return;
+
+  const statusValidos = ['operacional','manutencao','inativo','extraviado'];
+  const tiposValidos  = ['computador','notebook','servidor','impressora','projetor','outro'];
+
+  const toInsert = impData.map(r => ({
+    laboratorio_id: labId,
+    patrimonio:     r.patrimonio||null,
+    modelo:         r.modelo||null,
+    marca:          r.marca||null,
+    numero_serie:   r.numero_serie||r['número_série']||r['numero serie']||null,
+    processador:    r.processador||null,
+    ram_gb:         parseInt(r.ram_gb)||null,
+    armazenamento_gb: parseInt(r.armazenamento_gb)||null,
+    sistema_operacional: r.sistema_operacional||null,
+    tipo:           tiposValidos.includes((r.tipo||'').toLowerCase()) ? r.tipo.toLowerCase() : 'computador',
+    status:         statusValidos.includes((r.status||'').toLowerCase()) ? r.status.toLowerCase() : 'operacional',
+    observacao:     r.observacao||null
+  }));
+
+  let total=0, errors=0;
+  for (let i=0; i<toInsert.length; i+=50) {
+    const { error } = await db.from('equipamentos').insert(toInsert.slice(i,i+50));
+    if (error) { errors++; console.error(error); }
+    else total += Math.min(50, toInsert.length-i);
+  }
+
+  // Log
+  try { await db.from('logs_acesso').insert({usuario_id:currentUser.id,usuario_email:currentUser.email,acao:'criar',tabela:'equipamentos',detalhes:{importacao:true,quantidade:total,laboratorio_id:labId}}); } catch(e){}
+
+  if (errors) toast(`Importação com erros. ${total} equipamentos inseridos.`,'info');
+  else toast(`✅ ${total} equipamentos importados com sucesso!`,'success');
+
+  impData = [];
+  document.getElementById('imp-file').value='';
+  document.getElementById('imp-preview').style.display='none';
+  checkAlertas();
+}
+
+function baixarTemplateCSV() {
+  const csv = 'patrimonio,modelo,marca,numero_serie,processador,ram_gb,armazenamento_gb,sistema_operacional,tipo,status,observacao\n403001,Optiplex 3040,Dell,XXXXXXXX,Intel Core i5-6500,8,500,Windows 10 Education,computador,operacional,';
+  const a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent('\uFEFF'+csv);
+  a.download = 'template_importacao.csv';
+  a.click();
+}
+// ============================================================
+// ███████╗  EXPORTAÇÃO PDF
+// ============================================================
+
+async function exportPDF(tipo) {
+  if (!window.jspdf) { toast('Biblioteca PDF ainda carregando, aguarde...','info'); return; }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+
+  const RED   = [200, 16, 46];
+  const DARK  = [18, 18, 18];
+  const GRAY  = [120, 120, 120];
+  const WHITE = [255, 255, 255];
+  const LIGHT = [245, 245, 245];
+  const W = doc.internal.pageSize.getWidth();
+
+  const addHeader = (titulo, subtitulo) => {
+    doc.setFillColor(...RED);
+    doc.rect(0, 0, W, 18, 'F');
+    doc.setTextColor(...WHITE);
+    doc.setFontSize(13); doc.setFont('helvetica','bold');
+    doc.text('NaTI · UNA Aimorés', 10, 11);
+    doc.setFontSize(10); doc.setFont('helvetica','normal');
+    doc.text(titulo, W/2, 11, { align:'center' });
+    doc.setFontSize(8);
+    doc.text(new Date().toLocaleString('pt-BR'), W - 10, 11, { align:'right' });
+    doc.setTextColor(...DARK);
+    doc.setFontSize(11); doc.setFont('helvetica','bold');
+    doc.text(titulo, 10, 28);
+    if (subtitulo) {
+      doc.setFontSize(9); doc.setFont('helvetica','normal');
+      doc.setTextColor(...GRAY);
+      doc.text(subtitulo, 10, 34);
+      doc.setTextColor(...DARK);
+    }
+  };
+
+  const addFooter = () => {
+    const pages = doc.internal.getNumberOfPages();
+    for (let i = 1; i <= pages; i++) {
+      doc.setPage(i);
+      doc.setFontSize(7); doc.setTextColor(...GRAY);
+      doc.text(`Página ${i} de ${pages}  ·  NaTI Sistema de Inventário  ·  ${new Date().toLocaleDateString('pt-BR')}`, W/2, doc.internal.pageSize.getHeight() - 5, { align:'center' });
+    }
+  };
+
+  // ── EQUIPAMENTOS ──
+  if (tipo === 'equipamentos') {
+    if (!window.equipData?.length) { toast('Carregue a página de equipamentos primeiro','error'); return; }
+    addHeader('Relatório de Equipamentos', `${equipData.length} equipamentos`);
+    doc.autoTable({
+      startY: 38,
+      head: [['Patrimônio','Tipo','Marca','Modelo','CPU','RAM','HD/SSD','S.O.','Status','Lab']],
+      body: equipData.map(e => [
+        e.patrimonio||'—', e.tipo||'—', e.marca||'—', e.modelo||'—',
+        e.processador||'—',
+        e.ram_gb ? e.ram_gb+'GB' : '—',
+        e.armazenamento_gb ? e.armazenamento_gb+'GB' : '—',
+        e.sistema_operacional||'—',
+        e.status||'—',
+        e.laboratorios ? `${e.laboratorios.numero}` : '—'
+      ]),
+      styles: { fontSize: 7, cellPadding: 2 },
+      headStyles: { fillColor: RED, textColor: WHITE, fontStyle:'bold' },
+      alternateRowStyles: { fillColor: LIGHT },
+      columnStyles: { 0:{cellWidth:22}, 1:{cellWidth:20}, 2:{cellWidth:18}, 3:{cellWidth:28}, 4:{cellWidth:32}, 5:{cellWidth:12}, 6:{cellWidth:15}, 7:{cellWidth:28}, 8:{cellWidth:22}, 9:{cellWidth:12} }
+    });
+    addFooter();
+    doc.save(`equipamentos_${new Date().toISOString().split('T')[0]}.pdf`);
+    toast('PDF gerado com sucesso!','success');
+    return;
+  }
+
+  // ── MANUTENÇÕES ──
+  if (tipo === 'manutencoes') {
+    if (!window.manutData?.length) { toast('Carregue a página de manutenções primeiro','error'); return; }
+    addHeader('Relatório de Manutenções', `${manutData.length} chamados`);
+    doc.autoTable({
+      startY: 38,
+      head: [['Título','Status','Prioridade','Responsável','Equipamento','Lab','Data']],
+      body: manutData.map(m => [
+        m.titulo||'—',
+        m.status||'—',
+        m.prioridade||'—',
+        m.perfis?.nome||'—',
+        m.equipamentos ? `${m.equipamentos.marca||''} ${m.equipamentos.modelo||''}`.trim()||'—' : '—',
+        m.laboratorios?.numero||'—',
+        m.criado_em ? new Date(m.criado_em).toLocaleDateString('pt-BR') : '—'
+      ]),
+      styles: { fontSize: 7, cellPadding: 2 },
+      headStyles: { fillColor: RED, textColor: WHITE, fontStyle:'bold' },
+      alternateRowStyles: { fillColor: LIGHT },
+    });
+    addFooter();
+    doc.save(`manutencoes_${new Date().toISOString().split('T')[0]}.pdf`);
+    toast('PDF gerado com sucesso!','success');
+    return;
+  }
+
+  // ── SOFTWARES ──
+  if (tipo === 'softwares') {
+    const {data:sws} = await db.from('softwares')
+      .select('*, laboratorios(nome,numero), equipamentos(marca,modelo,patrimonio)')
+      .order('nome');
+    if (!sws?.length) { toast('Nenhum software encontrado','error'); return; }
+    addHeader('Relatório de Softwares', `${sws.length} registros`);
+    doc.autoTable({
+      startY: 38,
+      head: [['Nome','Versão','Licença','Curso','Laboratório','Máquina']],
+      body: sws.map(s => [
+        s.nome||'—', s.versao||'—', s.licenca||'—', s.curso||'—',
+        s.laboratorios ? `${s.laboratorios.numero} · ${s.laboratorios.nome}` : '—',
+        s.equipamentos ? `${s.equipamentos.marca||''} ${s.equipamentos.modelo||''} (${s.equipamentos.patrimonio||'s/pat'})` : '—'
+      ]),
+      styles: { fontSize: 7, cellPadding: 2 },
+      headStyles: { fillColor: RED, textColor: WHITE, fontStyle:'bold' },
+      alternateRowStyles: { fillColor: LIGHT },
+    });
+    addFooter();
+    doc.save(`softwares_${new Date().toISOString().split('T')[0]}.pdf`);
+    toast('PDF gerado com sucesso!','success');
+    return;
+  }
+
+  // ── LOGS ──
+  if (tipo === 'logs') {
+    if (!window.logs_cache?.length) { toast('Carregue a página de logs primeiro','error'); return; }
+    addHeader('Relatório de Logs de Acesso', `Últimos ${logs_cache.length} registros`);
+    doc.autoTable({
+      startY: 38,
+      head: [['Data/Hora','Usuário','E-mail','Ação','Tabela','Detalhes']],
+      body: logs_cache.map(l => [
+        new Date(l.criado_em).toLocaleString('pt-BR'),
+        l.usuario_nome||'—', l.usuario_email||'—', l.acao||'—', l.tabela||'—',
+        l.detalhes ? JSON.stringify(l.detalhes).substring(0,60) : '—'
+      ]),
+      styles: { fontSize: 6.5, cellPadding: 2 },
+      headStyles: { fillColor: RED, textColor: WHITE, fontStyle:'bold' },
+      alternateRowStyles: { fillColor: LIGHT },
+    });
+    addFooter();
+    doc.save(`logs_acesso_${new Date().toISOString().split('T')[0]}.pdf`);
+    toast('PDF gerado com sucesso!','success');
+    return;
+  }
+
+  // ── RELATÓRIO GERAL ──
+  if (tipo === 'relatorio') {
+    const [{data:labs},{data:equips},{data:sws},{data:mauts}] = await Promise.all([
+      db.from('vw_lab_resumo').select('*').order('numero'),
+      db.from('equipamentos').select('status').order('status'),
+      db.from('softwares').select('id'),
+      db.from('manutencoes').select('status').order('status')
+    ]);
+
+    addHeader('Relatório Geral do Sistema', `Campus Aimorés · ${new Date().toLocaleDateString('pt-BR')}`);
+
+    // Resumo executivo
+    const totalEquips = equips?.length||0;
+    const operacionais = equips?.filter(e=>e.status==='operacional').length||0;
+    const emManut = equips?.filter(e=>e.status==='manutencao').length||0;
+    const inativos = equips?.filter(e=>e.status==='inativo').length||0;
+
+    doc.setFontSize(9); doc.setFont('helvetica','bold'); doc.setTextColor(...DARK);
+    doc.text('Resumo Executivo', 10, 42);
+    doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(...GRAY);
+    doc.text(`Total equipamentos: ${totalEquips}   Operacionais: ${operacionais}   Em manutenção: ${emManut}   Inativos: ${inativos}   Softwares: ${sws?.length||0}   Chamados abertos: ${mauts?.filter(m=>m.status!=='resolvido').length||0}`, 10, 48);
+    doc.setTextColor(...DARK);
+
+    // Tabela de labs
+    doc.setFontSize(9); doc.setFont('helvetica','bold');
+    doc.text('Resumo por Laboratório', 10, 56);
+    doc.autoTable({
+      startY: 59,
+      head: [['Lab','Nome','Andar','Total Equip.','Operacionais','Em Manutenção','Inativos','Softwares','Alertas']],
+      body: (labs||[]).map(l => [
+        l.numero||'—', l.nome||'—', l.andar||'—',
+        l.total_maquinas||0, l.maquinas_ok||0, l.em_manutencao||0,
+        (l.inativas||0)+(l.extraviadas||0), l.total_softwares||0, l.alertas_ativos||0
+      ]),
+      styles: { fontSize: 7.5, cellPadding: 2 },
+      headStyles: { fillColor: RED, textColor: WHITE, fontStyle:'bold' },
+      alternateRowStyles: { fillColor: LIGHT },
+      columnStyles: { 4:{fillColor:[220,255,220]}, 5:{fillColor:[255,240,200]}, 6:{fillColor:[255,220,220]} }
+    });
+
+    addFooter();
+    doc.save(`relatorio_geral_${new Date().toISOString().split('T')[0]}.pdf`);
+    toast('PDF gerado com sucesso!','success');
+    return;
+  }
+
+  toast('Tipo de exportação não reconhecido','error');
 }
 
 </script>
