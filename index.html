@@ -736,6 +736,24 @@ function setupRealtime() {
         if (currentPage === 'lab3d') load3dData().then(build3dSidebar);
       });
     })
+    .on('postgres_changes', { event:'*', schema:'public', table:'softwares' }, () => {
+      debouncedRefresh('softwares', () => {
+        if (currentPage === 'softwares') renderSoftwares();
+      });
+    })
+    .on('postgres_changes', { event:'*', schema:'public', table:'alertas' }, () => {
+      debouncedRefresh('alertas', () => {
+        checkAlertas();
+        if (currentPage === 'alertas') renderAlertas();
+      });
+    })
+    .on('postgres_changes', { event:'*', schema:'public', table:'predios' }, () => {
+      debouncedRefresh('predios', () => {
+        if (currentPage === 'predios') renderPredios();
+        if (currentPage === 'laboratorios') renderLaboratorios();
+        if (currentPage === 'dashboard') renderDashboard();
+      });
+    })
     .subscribe();
   realtimeChannels.push(ch);
 }
@@ -907,7 +925,7 @@ async function renderDashboard() {
     db.from('predios').select('*'),
     db.from('laboratorios').select('*'),
     db.from('equipamentos').select('*'),
-    db.from('manutencoes').select('*').order('aberto_em', { ascending:true })
+    db.from('manutencoes').select('*').order('criado_em', { ascending:true })
   ]);
 
   const manut = (manutAll||[]).filter(m => m.status !== 'resolvido');
@@ -941,7 +959,7 @@ async function renderDashboard() {
     const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
     monthLabels.push(d.toLocaleDateString('pt-BR',{month:'short',year:'2-digit'}));
     monthVals.push((manutAll||[]).filter(m => {
-      const md = new Date(m.aberto_em);
+      const md = new Date(m.criado_em||m.aberto_em);
       return md.getFullYear()===d.getFullYear() && md.getMonth()===d.getMonth();
     }).length);
   }
@@ -1054,7 +1072,7 @@ async function renderLaboratorios(predioFilter=null) {
   const rows = allLabs.map(l => {
     const pct = l.total_maquinas ? Math.round(l.maquinas_ok/l.total_maquinas*100) : 0;
     const pctCls = pct>80?'pf-green':pct>50?'pf-orange':'pf-red';
-    return `<tr><td><strong>${l.numero}</strong></td><td>${l.nome}</td><td>${predioBadge(l.predio,l.predio_cor)}</td><td class="td-mono">${l.andar}º</td><td><span class="badge badge-blue">${l.tipo||'—'}</span></td><td class="td-mono">${l.total_maquinas||0}</td><td><div style="display:flex;align-items:center;gap:8px"><span style="font-size:12px">${pct}%</span><div class="progress-bar" style="width:80px"><div class="progress-fill ${pctCls}" style="width:${pct}%"></div></div></div></td><td>${l.em_manutencao>0?`<span class="badge badge-orange">${l.em_manutencao}</span>`:'—'}</td><td class="actions-cell"><button class="btn btn-ghost btn-sm" onclick="verLab('${l.id}')">Ver</button>${canEdit()?`<button class="btn btn-ghost btn-sm" onclick="modalEditLab('${l.id}')">✏️</button>`:''}${canEdit()?`<button class="btn btn-ghost btn-sm" onclick="goto3dLab('${l.id}')">🧊</button>`:''}</td></tr>`;
+    return `<tr><td><strong>${l.numero}</strong></td><td>${l.nome}</td><td>${predioBadge(l.predio_nome||'—',l.predio_cor||'#666')}</td><td class="td-mono">${l.andar}º</td><td><span class="badge badge-blue">${l.tipo||'—'}</span></td><td class="td-mono">${l.total_maquinas||0}</td><td><div style="display:flex;align-items:center;gap:8px"><span style="font-size:12px">${pct}%</span><div class="progress-bar" style="width:80px"><div class="progress-fill ${pctCls}" style="width:${pct}%"></div></div></div></td><td>${l.em_manutencao>0?`<span class="badge badge-orange">${l.em_manutencao}</span>`:'—'}</td><td class="actions-cell"><button class="btn btn-ghost btn-sm" onclick="verLab('${l.id}')">Ver</button>${canEdit()?`<button class="btn btn-ghost btn-sm" onclick="modalEditLab('${l.id}')">✏️</button>`:''}${canEdit()?`<button class="btn btn-ghost btn-sm" onclick="goto3dLab('${l.id}')">🧊</button>`:''}</td></tr>`;
   }).join('');
   setContent(`<div class="section-header"><div><div class="section-title">Laboratórios</div><div class="section-sub">${allLabs.length} ambientes</div></div></div><div class="filter-bar"><select onchange="renderLaboratorios(this.value||null)"><option value="">Todos os prédios</option>${filterOptions}</select></div><div class="table-card"><div class="table-wrap"><table><thead><tr><th>Nº</th><th>Nome</th><th>Prédio</th><th>Andar</th><th>Tipo</th><th>Máquinas</th><th>Disponibilidade</th><th>Manut.</th><th></th></tr></thead><tbody>${rows||'<tr><td colspan="9"><div class="empty">Nenhum laboratório cadastrado.<br><br><button class="btn btn-red btn-sm" onclick="modalNovoLab()">＋ Novo Lab</button></div></td></tr>'}</tbody></table></div></div>`);
 }
@@ -1067,12 +1085,12 @@ function goto3dLab(labId) {
 async function verLab(id) {
   const { data: lab } = await db.from('vw_lab_resumo').select('*').eq('id', id).single();
   const { data: equips } = await db.from('equipamentos').select('*').eq('laboratorio_id', id).order('tipo');
-  const { data: sws } = await db.from('softwares').select('*').eq('laboratorio_id', id).order('nome');
+  const { data: sws } = await db.from('softwares').select('*, equipamentos(marca,modelo,patrimonio)').eq('laboratorio_id', id).order('nome');
   const eRows = (equips||[]).map(e=>`<tr class="${!e.patrimonio?'row-sem-pat':''}"><td>${e.tipo}</td><td>${e.marca||'—'} ${e.modelo||''}</td><td class="td-mono">${e.patrimonio?e.patrimonio:`<span class="pat-missing">s/ pat.</span>`}</td><td>${statusBadge(e.status)}</td><td><button class="btn btn-ghost btn-sm" onclick="showQR('${e.id}','${e.patrimonio||e.id}')">QR</button><button class="btn btn-ghost btn-sm" onclick="closeModal();verHistoricoEquip('${e.id}')">📋</button></td></tr>`).join('');
-  const swRows = (sws||[]).map(s=>`<tr><td>${s.nome}</td><td>${s.versao||'—'}</td><td><span class="badge badge-blue">${s.licenca||'—'}</span></td></tr>`).join('');
+  const swRows = (sws||[]).map(s=>`<tr><td>${s.nome}${s.curso?` <small style="color:var(--text2)">(${s.curso})</small>`:''}</td><td>${s.versao||'—'}</td><td><span class="badge badge-blue">${s.licenca||'—'}</span></td><td style="font-size:11px;color:var(--text2)">${s.equipamentos?`🖥 ${s.equipamentos.marca||''} ${s.equipamentos.modelo||''}`:'Todo o lab'}</td></tr>`).join('');
   const equipSection = equips?.length ? `<h4 style="margin-bottom:10px;font-size:13px;color:var(--text2)">EQUIPAMENTOS (${equips.length})</h4><div class="table-wrap"><table><thead><tr><th>Tipo</th><th>Marca/Modelo</th><th>Patrimônio</th><th>Status</th><th></th></tr></thead><tbody>${eRows}</tbody></table></div>` : '<p style="color:var(--text2);font-size:13px;margin-bottom:12px">Nenhum equipamento cadastrado.</p>';
-  const swSection = sws?.length ? `<h4 style="margin:16px 0 10px;font-size:13px;color:var(--text2)">SOFTWARES (${sws.length})</h4><div class="table-wrap"><table><thead><tr><th>Nome</th><th>Versão</th><th>Licença</th></tr></thead><tbody>${swRows}</tbody></table></div>` : '';
-  openModal(`Lab ${lab?.numero} · ${lab?.nome}`, `<div class="detail-grid" style="margin-bottom:20px"><div class="detail-item"><div class="di-label">Prédio</div><div class="di-value">${predioBadge(lab?.predio||'—',lab?.predio_cor||'#666')}</div></div><div class="detail-item"><div class="di-label">Andar</div><div class="di-value">${lab?.andar}º</div></div><div class="detail-item"><div class="di-label">Capacidade</div><div class="di-value">${lab?.capacidade||'—'}</div></div><div class="detail-item"><div class="di-label">Tipo</div><div class="di-value">${lab?.tipo||'—'}</div></div></div>${equipSection}${swSection}`,`<button class="btn btn-ghost" onclick="closeModal()">Fechar</button><button class="btn btn-ghost" onclick="closeModal();goto3dLab('${id}')">🧊 Ver 3D</button>`);
+  const swSection = sws?.length ? `<h4 style="margin:16px 0 10px;font-size:13px;color:var(--text2)">SOFTWARES (${sws.length})</h4><div class="table-wrap"><table><thead><tr><th>Nome</th><th>Versão</th><th>Licença</th><th>Escopo</th></tr></thead><tbody>${swRows}</tbody></table></div>` : '';
+  openModal(`Lab ${lab?.numero} · ${lab?.nome}`, `<div class="detail-grid" style="margin-bottom:20px"><div class="detail-item"><div class="di-label">Prédio</div><div class="di-value">${predioBadge(lab?.predio||'—',lab?.predio_cor||'#666')}</div></div><div class="detail-item"><div class="di-label">Andar</div><div class="di-value">${lab?.andar}º</div></div><div class="detail-item"><div class="di-label">Total Máquinas</div><div class="di-value">${lab?.total_maquinas||0}</div></div><div class="detail-item"><div class="di-label">Tipo</div><div class="di-value">${lab?.tipo||'—'}</div></div></div>${equipSection}${swSection}`,`<button class="btn btn-ghost" onclick="closeModal()">Fechar</button><button class="btn btn-ghost" onclick="closeModal();goto3dLab('${id}')">🧊 Ver 3D</button>`);
 }
 
 async function modalNovoLab() {
@@ -1159,7 +1177,7 @@ function filterEquip() {
   equipData = equipDataFull.filter(e=>{
     const txt=`${e.tipo} ${e.marca||''} ${e.modelo||''} ${e.patrimonio||''} ${e.numero_serie||''}`.toLowerCase();
     const labMatch = !lb || e.laboratorio_id===lb;
-    const predioMatch = !pr || e.laboratorios?.predio_id===pr;
+    const predioMatch = !pr || e.laboratorios?.predio_id===pr || e.laboratorios?.predios?.id===pr;
     const semPat = !_filterSemPat || !e.patrimonio;
     return(!q||txt.includes(q))&&(!st||e.status===st)&&(!tp||e.tipo===tp)&&labMatch&&predioMatch&&semPat;
   });
@@ -1195,7 +1213,7 @@ async function refreshEquipamentos(){
 async function verHistoricoEquip(id) {
   const [{data:e},{data:hist}] = await Promise.all([
     db.from('equipamentos').select('tipo,marca,modelo,patrimonio').eq('id',id).single(),
-    db.from('manutencoes').select('*').eq('equipamento_id',id).order('aberto_em',{ascending:false})
+    db.from('manutencoes').select('*').eq('equipamento_id',id).order('criado_em',{ascending:false})
   ]);
   const histHTML = (hist||[]).length ? (hist||[]).map(m=>`
     <div class="hist-item ${m.status}">
@@ -1205,7 +1223,7 @@ async function verHistoricoEquip(id) {
       </div>
       <div class="hist-meta">
         <span>${prioridadeBadge(m.prioridade)}</span>
-        <span>Aberto: ${new Date(m.aberto_em).toLocaleDateString('pt-BR')}</span>
+        <span>Aberto: ${new Date(m.criado_em||m.aberto_em||Date.now()).toLocaleDateString('pt-BR')}</span>
         ${m.resolvido_em?`<span style="color:var(--green)">✓ Resolvido: ${new Date(m.resolvido_em).toLocaleDateString('pt-BR')}</span>`:''}
       </div>
       ${m.descricao?`<p style="font-size:12px;color:var(--text2);margin-top:6px">${m.descricao}</p>`:''}
@@ -1254,13 +1272,13 @@ let manutDataFull = [];
 async function renderManutencoes(){
   setLoading();
   manutPage = 0;
-  const {data:manut}=await db.from('manutencoes').select(`*, equipamentos(tipo,marca,modelo,patrimonio,laboratorio_id,laboratorios(numero,nome))`).order('aberto_em',{ascending:false});
+  const {data:manut}=await db.from('manutencoes').select(`*, perfis(nome), equipamentos(tipo,marca,modelo,patrimonio,laboratorio_id,laboratorios(numero,nome))`).order('criado_em',{ascending:false});
   manutDataFull=manut||[];
   manutData=manut||[];
-  if(canEdit())document.getElementById('topbar-actions').innerHTML=`<button class="btn btn-ghost btn-sm" onclick="exportCSV(manutData,'manutencoes.csv')">⬇ CSV</button><button class="btn btn-ghost btn-sm" onclick="exportPDF('manutencoes')">⬇ PDF</button><button class="btn btn-red" onclick="modalNovaManutLivre()">＋ Chamado</button>`;
+  document.getElementById('topbar-actions').innerHTML=`<button class="btn btn-ghost btn-sm" onclick="exportCSV(manutData,'manutencoes.csv')">⬇ CSV</button><button class="btn btn-ghost btn-sm" onclick="exportPDF('manutencoes')">⬇ PDF</button>${canEdit()?'<button class="btn btn-red" onclick="modalNovaManutLivre()">＋ Chamado</button>':''}`;
   const content=document.getElementById('page-content');
   const abertos=manutData.filter(m=>m.status!=='resolvido').length;
-  content.innerHTML=`<div class="section-header"><div><div class="section-title">Manutenções</div><div class="section-sub" id="manut-count-sub">${abertos} abertos · ${manutData.length} total</div></div></div><div class="filter-bar"><div class="search-bar"><input id="manut-search" placeholder="Buscar..." oninput="filterManut()"/></div><select id="manut-status-filter" onchange="filterManut()"><option value="">Todos</option><option value="aberto">Aberto</option><option value="em_andamento">Em Andamento</option><option value="resolvido">Resolvido</option></select><select id="manut-prio-filter" onchange="filterManut()"><option value="">Prioridades</option><option value="critica">Crítica</option><option value="alta">Alta</option><option value="media">Média</option><option value="baixa">Baixa</option></select></div><div class="table-card"><div class="table-wrap"><table><thead><tr><th>Título</th><th>Equipamento</th><th>Lab</th><th>Status</th><th>Prioridade</th><th>Aberto</th><th>Resolvido</th><th></th></tr></thead><tbody id="manut-tbody"></tbody></table></div><div id="manut-pagination"></div></div>`;
+  content.innerHTML=`<div class="section-header"><div><div class="section-title">Manutenções</div><div class="section-sub" id="manut-count-sub">${abertos} abertos · ${manutData.length} total</div></div></div><div class="filter-bar"><div class="search-bar"><input id="manut-search" placeholder="Buscar..." oninput="filterManut()"/></div><select id="manut-status-filter" onchange="filterManut()"><option value="">Todos</option><option value="aberto">Aberto</option><option value="em_andamento">Em Andamento</option><option value="resolvido">Resolvido</option></select><select id="manut-prio-filter" onchange="filterManut()"><option value="">Prioridades</option><option value="critica">Crítica</option><option value="alta">Alta</option><option value="media">Média</option><option value="baixa">Baixa</option></select></div><div class="table-card"><div class="table-wrap"><table><thead><tr><th>Título</th><th>Equipamento</th><th>Lab</th><th>Responsável</th><th>Status</th><th>Prioridade</th><th>Aberto</th><th>Resolvido</th><th></th></tr></thead><tbody id="manut-tbody"></tbody></table></div><div id="manut-pagination"></div></div>`;
   renderManutPage();
 }
 
@@ -1284,13 +1302,13 @@ function renderManutPage() {
   const pgEl=document.getElementById('manut-pagination');
   if(!tbody)return;
   const pageData=manutData.slice(manutPage*PAGE_SIZE,(manutPage+1)*PAGE_SIZE);
-  const rows=pageData.map(m=>{const e=m.equipamentos;return`<tr><td><strong>${m.titulo}</strong></td><td>${e?`${e.tipo} · ${e.marca||''} ${e.modelo||''}`:'—'}</td><td>${e?.laboratorios?`${e.laboratorios.numero} · ${e.laboratorios.nome}`:'—'}</td><td>${manutBadge(m.status)}</td><td>${prioridadeBadge(m.prioridade)}</td><td class="td-mono">${new Date(m.aberto_em).toLocaleDateString('pt-BR')}</td><td>${m.resolvido_em?`<span style="font-size:11px;color:var(--green)">✓ ${new Date(m.resolvido_em).toLocaleDateString('pt-BR')}</span>`:'—'}</td>${canEdit()?`<td><button class="btn btn-ghost btn-sm" onclick="modalEditManut('${m.id}')">✏️</button></td>`:'<td></td>'}</tr>`;}).join('');
+  const rows=pageData.map(m=>{const e=m.equipamentos;return`<tr><td><strong>${m.titulo}</strong></td><td>${e?`${e.tipo} · ${e.marca||''} ${e.modelo||''}`:'—'}</td><td>${e?.laboratorios?`${e.laboratorios.numero} · ${e.laboratorios.nome}`:'—'}</td><td>${m.perfis?.nome||'—'}</td><td>${manutBadge(m.status)}</td><td>${prioridadeBadge(m.prioridade)}</td><td class="td-mono">${new Date(m.criado_em||m.criado_em||m.aberto_em||Date.now()).toLocaleDateString('pt-BR')}</td><td>${m.resolvido_em?`<span style="font-size:11px;color:var(--green)">✓ ${new Date(m.resolvido_em).toLocaleDateString('pt-BR')}</span>`:'—'}</td>${canEdit()?`<td><button class="btn btn-ghost btn-sm" onclick="modalEditManut('${m.id}')">✏️</button></td>`:'<td></td>'}</tr>`;}).join('');
   tbody.innerHTML=rows||'<tr><td colspan="8"><div class="empty-state"><div class="es-icon">🔧</div><h3>Nenhum chamado</h3><p>Ajuste os filtros ou abra um novo chamado</p>'+(canEdit()?'<br><button class="btn btn-red btn-sm" style="margin-top:12px" onclick="modalNovaManutLivre()">＋ Novo Chamado</button>':'')+'</div></td></tr>';
   if(pgEl) pgEl.innerHTML = buildPagination(manutData.length, manutPage, 'changeManutPage', 'manut-pagination');
 }
 
 async function refreshManutencoes(){
-  const {data:manut}=await db.from('manutencoes').select(`*, equipamentos(tipo,marca,modelo,patrimonio,laboratorio_id,laboratorios(numero,nome))`).order('aberto_em',{ascending:false});
+  const {data:manut}=await db.from('manutencoes').select(`*, perfis(nome), equipamentos(tipo,marca,modelo,patrimonio,laboratorio_id,laboratorios(numero,nome))`).order('criado_em',{ascending:false});
   manutDataFull=manut||[];
   filterManut();
 }
@@ -1339,7 +1357,7 @@ async function renderSoftwares(){
     db.from('laboratorios').select('*').order('numero')
   ]);
   const actions = canEdit() ? `<button class="btn btn-ghost btn-sm" onclick="exportPDF('softwares')">⬇ PDF</button><button class="btn btn-red" onclick="modalNovoSw()">＋ Software</button>` : `<button class="btn btn-ghost btn-sm" onclick="exportPDF('softwares')">⬇ PDF</button>`;
-  if(canEdit()) document.getElementById('topbar-actions').innerHTML = actions;
+  document.getElementById('topbar-actions').innerHTML = actions;
 
   // Agrupar por laboratório
   const porLab = {};
@@ -2987,59 +3005,68 @@ async function aimDoImport() {
 
 async function checkAlertas() {
   try {
-    // Gerar alertas automaticamente com base nos dados do sistema
     const [{data:labs},{data:equips},{data:mauts},{data:sws}] = await Promise.all([
       db.from('laboratorios').select('id,numero,nome,andar'),
       db.from('equipamentos').select('id,status,laboratorio_id'),
-      db.from('manutencoes').select('id,status,prioridade,equipamento_id,laboratorio_id').in('status',['aberto','em_andamento']),
+      db.from('manutencoes').select('id,status,prioridade,equipamento_id').in('status',['aberto','em_andamento']),
       db.from('softwares').select('id,laboratorio_id').is('equipamento_id',null)
     ]);
 
-    const labsComSw = new Set((sws||[]).map(s=>s.laboratorio_id));
+    const labsComSw = new Set((sws||[]).map(s=>s.laboratorio_id).filter(Boolean));
     const alertasParaGerar = [];
 
     for (const lab of (labs||[])) {
-      const equipLab = (equips||[]).filter(e=>e.laboratorio_id===lab.id);
-      const mautLab  = (mauts||[]).filter(m=>m.laboratorio_id===lab.id);
-      const inativas = equipLab.filter(e=>['inativo','extraviado'].includes(e.status));
+      const equipLab  = (equips||[]).filter(e=>e.laboratorio_id===lab.id);
+      const mautEquips = (equips||[]).filter(e=>e.laboratorio_id===lab.id).map(e=>e.id);
+      const mautLab   = (mauts||[]).filter(m=>mautEquips.includes(m.equipamento_id));
+      const inativas  = equipLab.filter(e=>['inativo','extraviado'].includes(e.status));
 
-      // Lab sem softwares cadastrados
       if (equipLab.length > 0 && !labsComSw.has(lab.id)) {
         alertasParaGerar.push({
           tipo:'sem_software', prioridade:'media',
           titulo:`${lab.numero} — Sem softwares cadastrados`,
-          descricao:`O laboratório ${lab.numero} (${lab.nome}) não possui softwares registrados no sistema.`,
-          laboratorio_id: lab.id
+          descricao:`O laboratório ${lab.numero} (${lab.nome}) não possui softwares registrados.`,
+          laboratorio_id: lab.id, status:'ativo'
         });
       }
-      // Manutenções críticas pendentes
+
       const mautCritica = mautLab.filter(m=>m.prioridade==='critica');
       if (mautCritica.length > 0) {
         alertasParaGerar.push({
           tipo:'manutencao_pendente', prioridade:'critica',
-          titulo:`${lab.numero} — ${mautCritica.length} manutenção(ões) CRÍTICA(S) pendente(s)`,
+          titulo:`${lab.numero} — ${mautCritica.length} manutenção(ões) crítica(s) pendente(s)`,
           descricao:`Existem ${mautCritica.length} chamado(s) crítico(s) não resolvidos neste laboratório.`,
-          laboratorio_id: lab.id
+          laboratorio_id: lab.id, status:'ativo'
         });
       }
-      // Equipamentos inativos/extraviados
+
+      const mautAlta = mautLab.filter(m=>m.prioridade==='alta');
+      if (mautAlta.length > 0) {
+        alertasParaGerar.push({
+          tipo:'manutencao_pendente', prioridade:'alta',
+          titulo:`${lab.numero} — ${mautAlta.length} manutenção(ões) com alta prioridade`,
+          descricao:`${mautAlta.length} chamado(s) de alta prioridade pendentes.`,
+          laboratorio_id: lab.id, status:'ativo'
+        });
+      }
+
       if (inativas.length > 0) {
         alertasParaGerar.push({
           tipo:'equipamento_inativo', prioridade:'alta',
           titulo:`${lab.numero} — ${inativas.length} equipamento(s) inativo(s)/extraviado(s)`,
           descricao:`${inativas.filter(e=>e.status==='inativo').length} inativo(s), ${inativas.filter(e=>e.status==='extraviado').length} extraviado(s).`,
-          laboratorio_id: lab.id
+          laboratorio_id: lab.id, status:'ativo'
         });
       }
     }
 
-    // Upsert alertas (limpar os ativos automaticamente gerados e reinserir)
-    await db.from('alertas').delete().match({status:'ativo'});
+    // Remove apenas alertas automáticos anteriores (tipo known), preserva manuais
+    const tiposAuto = ['sem_software','manutencao_pendente','equipamento_inativo'];
+    await db.from('alertas').delete().in('tipo', tiposAuto).eq('status','ativo');
     if (alertasParaGerar.length > 0) {
       await db.from('alertas').insert(alertasParaGerar);
     }
 
-    // Atualizar badge no sidebar
     const { data: ativos } = await db.from('alertas').select('id').eq('status','ativo');
     const badge = document.getElementById('alertas-badge');
     if (badge) {
@@ -3418,12 +3445,17 @@ async function exportPDF(tipo) {
 
   // ── EQUIPAMENTOS ──
   if (tipo === 'equipamentos') {
-    if (!window.equipData?.length) { toast('Carregue a página de equipamentos primeiro','error'); return; }
-    addHeader('Relatório de Equipamentos', `${equipData.length} equipamentos`);
+    toast('Gerando PDF...','info');
+    const {data:equips} = await db.from('equipamentos')
+      .select('*, laboratorios(numero,nome)')
+      .order('laboratorios(numero)', {ascending:true});
+    const dados = equips||[];
+    if (!dados.length) { toast('Nenhum equipamento encontrado','error'); return; }
+    addHeader('Relatório de Equipamentos', `${dados.length} equipamentos`);
     doc.autoTable({
       startY: 38,
       head: [['Patrimônio','Tipo','Marca','Modelo','CPU','RAM','HD/SSD','S.O.','Status','Lab']],
-      body: equipData.map(e => [
+      body: dados.map(e => [
         e.patrimonio||'—', e.tipo||'—', e.marca||'—', e.modelo||'—',
         e.processador||'—',
         e.ram_gb ? e.ram_gb+'GB' : '—',
@@ -3445,19 +3477,24 @@ async function exportPDF(tipo) {
 
   // ── MANUTENÇÕES ──
   if (tipo === 'manutencoes') {
-    if (!window.manutData?.length) { toast('Carregue a página de manutenções primeiro','error'); return; }
-    addHeader('Relatório de Manutenções', `${manutData.length} chamados`);
+    toast('Gerando PDF...','info');
+    const {data:manut} = await db.from('manutencoes')
+      .select('*, perfis(nome), equipamentos(marca,modelo,laboratorio_id,laboratorios(numero))')
+      .order('criado_em', {ascending:false});
+    const dados = manut||[];
+    if (!dados.length) { toast('Nenhum chamado encontrado','error'); return; }
+    addHeader('Relatório de Manutenções', `${dados.length} chamados`);
     doc.autoTable({
       startY: 38,
-      head: [['Título','Status','Prioridade','Responsável','Equipamento','Lab','Data']],
-      body: manutData.map(m => [
+      head: [['Título','Status','Prioridade','Responsável','Equipamento','Lab','Data Abertura']],
+      body: dados.map(m => [
         m.titulo||'—',
         m.status||'—',
         m.prioridade||'—',
         m.perfis?.nome||'—',
         m.equipamentos ? `${m.equipamentos.marca||''} ${m.equipamentos.modelo||''}`.trim()||'—' : '—',
-        m.laboratorios?.numero||'—',
-        m.criado_em ? new Date(m.criado_em).toLocaleDateString('pt-BR') : '—'
+        m.equipamentos?.laboratorios?.numero||'—',
+        m.criado_em ? new Date(m.criado_em).toLocaleDateString('pt-BR') : (m.aberto_em ? new Date(m.aberto_em).toLocaleDateString('pt-BR') : '—')
       ]),
       styles: { fontSize: 7, cellPadding: 2 },
       headStyles: { fillColor: RED, textColor: WHITE, fontStyle:'bold' },
@@ -3496,12 +3533,15 @@ async function exportPDF(tipo) {
 
   // ── LOGS ──
   if (tipo === 'logs') {
-    if (!window.logs_cache?.length) { toast('Carregue a página de logs primeiro','error'); return; }
-    addHeader('Relatório de Logs de Acesso', `Últimos ${logs_cache.length} registros`);
+    toast('Gerando PDF...','info');
+    const {data:logs} = await db.from('logs_acesso').select('*').order('criado_em',{ascending:false}).limit(500);
+    const dados = logs||[];
+    if (!dados.length) { toast('Nenhum log encontrado','error'); return; }
+    addHeader('Relatório de Logs de Acesso', `${dados.length} registros`);
     doc.autoTable({
       startY: 38,
       head: [['Data/Hora','Usuário','E-mail','Ação','Tabela','Detalhes']],
-      body: logs_cache.map(l => [
+      body: dados.map(l => [
         new Date(l.criado_em).toLocaleString('pt-BR'),
         l.usuario_nome||'—', l.usuario_email||'—', l.acao||'—', l.tabela||'—',
         l.detalhes ? JSON.stringify(l.detalhes).substring(0,60) : '—'
