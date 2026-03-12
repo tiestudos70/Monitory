@@ -953,22 +953,22 @@ async function renderDashboard() {
   const tipoLabels = Object.keys(tipoCount).sort((a,b)=>tipoCount[b]-tipoCount[a]);
   const tipoVals = tipoLabels.map(k=>tipoCount[k]);
 
-  // Distribuição por prédio
-  const predioMap = {};
-  (predios||[]).forEach(p => { predioMap[p.id] = { nome: p.nome, cor: p.cor||'#c8102e', op:0, manut:0, inativo:0, total:0 }; });
+  // Distribuição por andar
+  const andarMap = {};
   (labs||[]).forEach(l => {
-    if (!l.predio_id || !predioMap[l.predio_id]) return;
+    const andar = l.andar != null ? `${l.andar}º Andar` : 'Sem andar';
+    if (!andarMap[andar]) andarMap[andar] = { op:0, manut:0, inativo:0, total:0, _num: l.andar ?? 999 };
     const leqs = (equip||[]).filter(e => e.laboratorio_id === l.id);
-    predioMap[l.predio_id].op     += leqs.filter(e=>e.status==='operacional').length;
-    predioMap[l.predio_id].manut  += leqs.filter(e=>e.status==='manutencao').length;
-    predioMap[l.predio_id].inativo+= leqs.filter(e=>e.status==='inativo'||e.status==='extraviado').length;
-    predioMap[l.predio_id].total  += leqs.length;
+    andarMap[andar].op     += leqs.filter(e=>e.status==='operacional').length;
+    andarMap[andar].manut  += leqs.filter(e=>e.status==='manutencao').length;
+    andarMap[andar].inativo+= leqs.filter(e=>e.status==='inativo'||e.status==='extraviado').length;
+    andarMap[andar].total  += leqs.length;
   });
-  const predioList = Object.values(predioMap).filter(p=>p.total>0).sort((a,b)=>b.total-a.total);
-  const predioLabels = predioList.map(p=>p.nome);
-  const predioOp     = predioList.map(p=>p.op);
-  const predioManut  = predioList.map(p=>p.manut);
-  const predioInat   = predioList.map(p=>p.inativo);
+  const andarList   = Object.entries(andarMap).filter(([,v])=>v.total>0).sort((a,b)=>a[1]._num-b[1]._num);
+  const andarLabels = andarList.map(([k])=>k);
+  const andarOp     = andarList.map(([,v])=>v.op);
+  const andarManut  = andarList.map(([,v])=>v.manut);
+  const andarInat   = andarList.map(([,v])=>v.inativo);
 
   const criticalHTML = labRanking.length ? labRanking.map(l => {
     const pctColor = l.pct>80?'#2ecc71':l.pct>50?'#e67e22':'#c8102e';
@@ -997,7 +997,7 @@ async function renderDashboard() {
         <div class="dash-chart-box"><div class="chart-title">Equipamentos por Tipo</div><canvas id="chart-barras"></canvas></div>
       </div>
       <div class="dash-charts">
-        <div class="dash-chart-box dash-chart-full"><div class="chart-title">Equipamentos por Prédio</div><canvas id="chart-predios"></canvas></div>
+        <div class="dash-chart-box dash-chart-full"><div class="chart-title">Equipamentos por Andar</div><canvas id="chart-andares" style="max-height:320px"></canvas></div>
       </div>
       <div class="dash-charts" style="margin-top:0">
         <div class="dash-chart-box dash-chart-full" style="background:var(--bg2);border:1px solid var(--border)">
@@ -1029,22 +1029,35 @@ async function renderDashboard() {
   const ctxB = document.getElementById('chart-barras')?.getContext('2d');
   if (ctxB) _dashCharts.push(new Chart(ctxB, { type:'bar', data:{ labels:tipoLabels, datasets:[{ label:'Qtd', data:tipoVals, backgroundColor:'#c8102e', borderRadius:6, borderSkipped:false }] }, options:{ indexAxis:'y', plugins:{legend:{display:false}}, scales:{ x:{grid:{color:'#f0f0f0'},ticks:{stepSize:1}}, y:{grid:{display:false},ticks:{font:{size:11}}} }, animation:{duration:900} } }));
 
-  const ctxP = document.getElementById('chart-predios')?.getContext('2d');
+  const ctxP = document.getElementById('chart-andares')?.getContext('2d');
   if (ctxP) _dashCharts.push(new Chart(ctxP, {
     type: 'bar',
     data: {
-      labels: predioLabels,
+      labels: andarLabels,
       datasets: [
-        { label:'Operacional', data:predioOp,    backgroundColor:'#2ecc71', borderRadius:4, borderSkipped:false },
-        { label:'Manutenção',  data:predioManut,  backgroundColor:'#e67e22', borderRadius:4, borderSkipped:false },
-        { label:'Inativo/Extraviado', data:predioInat, backgroundColor:'#c8102e', borderRadius:4, borderSkipped:false }
+        { label:'Operacional',        data:andarOp,    backgroundColor:'#2ecc71', borderRadius:4, borderSkipped:false },
+        { label:'Manutenção',         data:andarManut,  backgroundColor:'#e67e22', borderRadius:4, borderSkipped:false },
+        { label:'Inativo/Extraviado', data:andarInat,   backgroundColor:'#c8102e', borderRadius:4, borderSkipped:false }
       ]
     },
     options: {
-      plugins: { legend:{ position:'bottom', labels:{ boxWidth:12, padding:16, font:{size:12} } } },
+      indexAxis: 'y',
+      plugins: {
+        legend: { position:'bottom', labels:{ boxWidth:12, padding:16, font:{size:12} } },
+        tooltip: {
+          callbacks: {
+            afterBody: (items) => {
+              const idx = items[0].dataIndex;
+              const total = andarOp[idx] + andarManut[idx] + andarInat[idx];
+              const pct = total ? Math.round(andarOp[idx]/total*100) : 0;
+              return `Total: ${total} · ${pct}% operacional`;
+            }
+          }
+        }
+      },
       scales: {
-        x: { stacked:true, grid:{ display:false } },
-        y: { stacked:true, grid:{ color:'rgba(255,255,255,0.05)' }, ticks:{ stepSize:10, color:'#888' }, beginAtZero:true }
+        x: { stacked:true, grid:{ color:'rgba(255,255,255,0.05)' }, ticks:{ stepSize:20, color:'#888' }, beginAtZero:true },
+        y: { stacked:true, grid:{ display:false }, ticks:{ font:{size:12}, color:'#ccc' } }
       },
       animation:{ duration:900 }
     }
