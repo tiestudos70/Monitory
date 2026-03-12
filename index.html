@@ -2783,7 +2783,7 @@ function aimDeleteMachine(labKey, idx) {
 }
 
 // ── SALAS DE AULA ──
-function aimRenderSalas() {
+function aimRenderSalas(fromInput) {
   const q = _aimState.filter.toLowerCase();
   const all = _aimState.salas;
   const filtered = q ? all.filter(s=>Object.values(s).some(v=>String(v).toLowerCase().includes(q))) : all;
@@ -2813,9 +2813,18 @@ function aimRenderSalas() {
     <button class="pg-btn" onclick="aimPage(1)" ${_aimState.page>=totalPages-1?'disabled':''}>›</button>
   </div>` : '';
 
+  // Se chamado pelo input, só atualiza tabela (preserva foco)
+  if (fromInput) {
+    const tb = document.getElementById('aim-salas-tbody');
+    const pg2 = document.getElementById('aim-salas-pg');
+    if (tb) { tb.innerHTML = rows; }
+    if (pg2) { pg2.innerHTML = pg; }
+    return;
+  }
+
   document.getElementById('aim-content').innerHTML = `
   <div class="aim-filter-row">
-    <div class="search-bar"><input placeholder="Buscar sala..." value="${_aimState.filter}" oninput="_aimState.filter=this.value;_aimState.page=0;aimRenderSalas()"/></div>
+    <div class="search-bar"><input id="aim-salas-search" placeholder="Buscar sala..." value="${_aimState.filter}" oninput="_aimState.filter=this.value;_aimState.page=0;aimRenderSalas(true)"/></div>
     <button class="btn btn-red btn-sm" onclick="aimAddSala()">＋ Sala</button>
     <button class="btn btn-ghost btn-sm" onclick="aimExportSalasCSV()">⬇ CSV</button>
   </div>
@@ -2823,8 +2832,8 @@ function aimRenderSalas() {
     <div class="aim-table-wrap"><table><thead><tr>
       <th>Sala/Lab</th><th>Projetor</th><th>Patrimônio</th><th>Horas (+/-)</th>
       <th>Amplificador</th><th>Caixas Som</th><th>Tomadas</th><th>Ações</th>
-    </tr></thead><tbody>${rows||'<tr><td colspan="8"><div class="empty">Nenhuma sala.</div></td></tr>'}</tbody></table></div>
-    ${pg}
+    </tr></thead><tbody id="aim-salas-tbody">${rows||'<tr><td colspan="8"><div class="empty">Nenhuma sala.</div></td></tr>'}</tbody></table></div>
+    <div id="aim-salas-pg">${pg}</div>
   </div>`;
 }
 
@@ -2922,7 +2931,7 @@ function aimDeleteSala(idx) {
 }
 
 // ── ADMINISTRATIVO ──
-function aimRenderAdmin() {
+function aimRenderAdmin(fromInput) {
   const q = _aimState.filter.toLowerCase();
   const all = _aimState.admin;
   const filtered = q ? all.filter(a=>Object.values(a).some(v=>String(v).toLowerCase().includes(q))) : all;
@@ -2952,9 +2961,18 @@ function aimRenderAdmin() {
     <button class="pg-btn" onclick="aimPage(1)" ${_aimState.page>=totalPages-1?'disabled':''}>›</button>
   </div>` : '';
 
+  // Se chamado pelo input, só atualiza tabela (preserva foco)
+  if (fromInput) {
+    const tb = document.getElementById('aim-admin-tbody');
+    const pg2 = document.getElementById('aim-admin-pg');
+    if (tb) { tb.innerHTML = rows; }
+    if (pg2) { pg2.innerHTML = pg; }
+    return;
+  }
+
   document.getElementById('aim-content').innerHTML = `
   <div class="aim-filter-row">
-    <div class="search-bar"><input placeholder="Buscar setor, modelo..." value="${_aimState.filter}" oninput="_aimState.filter=this.value;_aimState.page=0;aimRenderAdmin()"/></div>
+    <div class="search-bar"><input id="aim-admin-search" placeholder="Buscar setor, modelo..." value="${_aimState.filter}" oninput="_aimState.filter=this.value;_aimState.page=0;aimRenderAdmin(true)"/></div>
     <button class="btn btn-red btn-sm" onclick="aimAddAdmin()">＋ Equip. Adm.</button>
     <button class="btn btn-ghost btn-sm" onclick="aimExportAdminCSV()">⬇ CSV</button>
   </div>
@@ -2962,8 +2980,8 @@ function aimRenderAdmin() {
     <div class="aim-table-wrap"><table><thead><tr>
       <th>Setor</th><th>Tipo</th><th>Modelo</th><th>Patrimônio</th>
       <th>Nº Série</th><th>Processador</th><th>Memória</th><th>Monitor</th><th>Ações</th>
-    </tr></thead><tbody>${rows||'<tr><td colspan="9"><div class="empty">Nenhum registro.</div></td></tr>'}</tbody></table></div>
-    ${pg}
+    </tr></thead><tbody id="aim-admin-tbody">${rows||'<tr><td colspan="9"><div class="empty">Nenhum registro.</div></td></tr>'}</tbody></table></div>
+    <div id="aim-admin-pg">${pg}</div>
   </div>`;
 }
 
