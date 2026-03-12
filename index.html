@@ -1095,15 +1095,30 @@ async function updatePredio(id){
 }
 
 async function deletePredio(id, nome, totalLabs){
-  if(totalLabs>0){toast(`Não é possível excluir: "${nome}" tem ${totalLabs} laboratório(s). Remova-os primeiro.`,'error');return;}
+  const aviso = totalLabs > 0
+    ? `<br><br>⚠️ Todos os <strong style="color:var(--red)">${totalLabs} laboratório(s)</strong> e seus equipamentos também serão <strong style="color:var(--red)">excluídos permanentemente</strong>.`
+    : '';
   openModal('Excluir Prédio',
-    `<p style="color:var(--text2);font-size:14px">Tem certeza que deseja excluir o prédio <strong style="color:var(--text)">${nome}</strong>? Esta ação não pode ser desfeita.</p>`,
-    `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-red" onclick="confirmDeletePredio('${id}')">Excluir</button>`);
+    `<p style="color:var(--text2);font-size:14px">Tem certeza que deseja excluir o prédio <strong style="color:var(--text)">${nome}</strong>? Esta ação não pode ser desfeita.${aviso}</p>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-red" onclick="confirmDeletePredio('${id}')">Excluir Tudo</button>`);
 }
 async function confirmDeletePredio(id){
+  // 1) busca os labs do prédio
+  const {data:labs}=await db.from('laboratorios').select('id').eq('predio_id',id);
+  if(labs&&labs.length>0){
+    const labIds=labs.map(l=>l.id);
+    // 2) exclui equipamentos de todos os labs
+    const {error:errEquip}=await db.from('equipamentos').delete().in('laboratorio_id',labIds);
+    if(errEquip){toast('Erro ao excluir equipamentos: '+errEquip.message,'error');return;}
+    // 3) exclui os labs
+    const {error:errLabs}=await db.from('laboratorios').delete().eq('predio_id',id);
+    if(errLabs){toast('Erro ao excluir laboratórios: '+errLabs.message,'error');return;}
+  }
+  // 4) exclui o prédio
   const {error}=await db.from('predios').delete().eq('id',id);
   if(error){toast(error.message,'error');return;}
-  toast('Prédio excluído!','success');closeModal();renderPredios();
+  try{await db.from('logs_acesso').insert({usuario_id:currentUser.id,usuario_email:currentUser.email,acao:'excluir',tabela:'predios',detalhes:{id}});}catch(e){}
+  toast('Prédio, laboratórios e equipamentos excluídos!','success');closeModal();renderPredios();
 }
 
 // ============================================================
@@ -1143,21 +1158,20 @@ async function verLab(id) {
 }
 
 async function deleteLab(id, nome, totalMaquinas){
-  if(totalMaquinas>0){
-    openModal('Não é possível excluir',
-      `<p style="color:var(--text2);font-size:14px">O laboratório <strong style="color:var(--text)">${nome}</strong> possui <strong style="color:var(--text)">${totalMaquinas} equipamento(s)</strong> vinculado(s).<br><br>Remova ou transfira os equipamentos antes de excluir o laboratório.</p>`,
-      `<button class="btn btn-ghost" onclick="closeModal()">Fechar</button>`);
-    return;
-  }
+  const aviso = totalMaquinas > 0
+    ? `<br><br>⚠️ Os <strong style="color:var(--red)">${totalMaquinas} equipamento(s)</strong> vinculados também serão <strong style="color:var(--red)">excluídos permanentemente</strong>.`
+    : '';
   openModal('Excluir Laboratório',
-    `<p style="color:var(--text2);font-size:14px">Tem certeza que deseja excluir o laboratório <strong style="color:var(--text)">${nome}</strong>? Esta ação não pode ser desfeita.</p>`,
-    `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-red" onclick="confirmDeleteLab('${id}')">Excluir</button>`);
+    `<p style="color:var(--text2);font-size:14px">Tem certeza que deseja excluir o laboratório <strong style="color:var(--text)">${nome}</strong>? Esta ação não pode ser desfeita.${aviso}</p>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-red" onclick="confirmDeleteLab('${id}')">Excluir Tudo</button>`);
 }
 async function confirmDeleteLab(id){
+  const {error:errEquip}=await db.from('equipamentos').delete().eq('laboratorio_id',id);
+  if(errEquip){toast('Erro ao excluir equipamentos: '+errEquip.message,'error');return;}
   const {error}=await db.from('laboratorios').delete().eq('id',id);
   if(error){toast(error.message,'error');return;}
   try{await db.from('logs_acesso').insert({usuario_id:currentUser.id,usuario_email:currentUser.email,acao:'excluir',tabela:'laboratorios',detalhes:{id}});}catch(e){}
-  toast('Laboratório excluído!','success');closeModal();renderLaboratorios();
+  toast('Laboratório e equipamentos excluídos!','success');closeModal();renderLaboratorios();
 }
 
 async function modalNovoLab() {
