@@ -1097,7 +1097,7 @@ async function renderPredios() {
   setLoading();
   const { data: predios } = await db.from('vw_predio_resumo').select('*');
   if (isAdmin()) document.getElementById('topbar-actions').innerHTML = `<button class="btn btn-red" onclick="modalNovoPredio()">＋ Novo Prédio</button>`;
-  const rows = (predios||[]).map(p => `<tr><td>${predioBadge(p.nome,p.cor)}</td><td class="td-mono">${p.total_labs}</td><td class="td-mono">${p.total_equipamentos}</td><td>${p.operacionais?`<span class="badge badge-green">${p.operacionais} op.</span>`:'—'}</td><td>${p.em_manutencao?`<span class="badge badge-orange">${p.em_manutencao}</span>`:'—'}</td>${isAdmin()?`<td class="actions-cell"><button class="btn btn-ghost btn-sm" onclick="modalEditPredio('${p.id}','${p.nome}','${p.cor}')">✏️ Editar</button><button class="btn btn-ghost btn-sm" onclick="deletePredio('${p.id}','${p.nome}',${p.total_labs||0})">🗑</button></td>`:'<td></td>'}</tr>`).join('');
+  const rows = (predios||[]).slice().sort((a,b)=>(a.nome||'').localeCompare(b.nome||'','pt-BR')).map(p => `<tr><td>${predioBadge(p.nome,p.cor)}</td><td class="td-mono">${p.total_labs}</td><td class="td-mono">${p.total_equipamentos}</td><td>${p.operacionais?`<span class="badge badge-green">${p.operacionais} op.</span>`:'—'}</td><td>${p.em_manutencao?`<span class="badge badge-orange">${p.em_manutencao}</span>`:'—'}</td>${isAdmin()?`<td class="actions-cell"><button class="btn btn-ghost btn-sm" onclick="modalEditPredio('${p.id}','${p.nome}','${p.cor}')">✏️ Editar</button><button class="btn btn-ghost btn-sm" onclick="deletePredio('${p.id}','${p.nome}',${p.total_labs||0})">🗑</button></td>`:'<td></td>'}</tr>`).join('');
   setContent(`<div class="section-header"><div><div class="section-title">Prédios</div><div class="section-sub">Visão geral por prédio</div></div></div><div class="table-card"><div class="table-wrap"><table><thead><tr><th>Prédio</th><th>Labs</th><th>Equipamentos</th><th>Operacionais</th><th>Manutenção</th><th></th></tr></thead><tbody>${rows||'<tr><td colspan="6"><div class="empty">Nenhum prédio cadastrado.<br><br><button class="btn btn-red btn-sm" onclick="modalNovoPredio()">＋ Novo Prédio</button></div></td></tr>'}</tbody></table></div></div>`);
 }
 
@@ -1261,12 +1261,21 @@ async function renderEquipamentos() {
   equipPage = 0;
   _filterSemPat = false; // reset filtro sem-pat a cada carregamento
   const [{data:equips},{data:labs},{data:predios}]=await Promise.all([
-    db.from('equipamentos').select(`*, laboratorios(nome,numero,predio_id,predios(nome,cor))`).order('criado_em',{ascending:false}),
-    db.from('laboratorios').select('*').order('numero'),
+    db.from('equipamentos').select(`*, laboratorios(nome,numero,andar,predio_id,predios(nome,cor))`).order('tipo').order('marca'),
+    db.from('laboratorios').select('*').order('andar').order('numero'),
     db.from('predios').select('*')
   ]);
-  equipDataFull = equips||[];
-  equipData = equips||[];
+  equipDataFull = (equips||[]).sort((a,b) => {
+    const fa = parseInt(a.laboratorios?.andar) || 999;
+    const fb = parseInt(b.laboratorios?.andar) || 999;
+    if (fa !== fb) return fa - fb;
+    const la = (a.laboratorios?.numero||'').localeCompare(b.laboratorios?.numero||'', undefined, {numeric:true});
+    if (la !== 0) return la;
+    const ta = (a.tipo||'').localeCompare(b.tipo||'');
+    if (ta !== 0) return ta;
+    return (a.marca||'').localeCompare(b.marca||'');
+  });
+  equipData = [...equipDataFull];
 
   const labOpts = (labs||[]).map(l=>`<option value="${l.id}">${l.numero} · ${l.nome}</option>`).join('');
   const predioOpts = (predios||[]).map(p=>`<option value="${p.id}">${p.nome}</option>`).join('');
@@ -1349,6 +1358,13 @@ function filterEquip() {
     const predioMatch = !pr || e.laboratorios?.predio_id===pr || e.laboratorios?.predios?.id===pr;
     const semPat = !_filterSemPat || !e.patrimonio;
     return(!q||txt.includes(q))&&(!st||e.status===st)&&(!tp||e.tipo===tp)&&labMatch&&predioMatch&&semPat;
+  }).sort((a,b) => {
+    const fa = parseInt(a.laboratorios?.andar) || 999;
+    const fb = parseInt(b.laboratorios?.andar) || 999;
+    if (fa !== fb) return fa - fb;
+    const la = (a.laboratorios?.numero||'').localeCompare(b.laboratorios?.numero||'', undefined, {numeric:true});
+    if (la !== 0) return la;
+    return (a.tipo||'').localeCompare(b.tipo||'');
   });
   equipPage = 0;
   const sub = document.getElementById('equip-count-sub');
@@ -1449,8 +1465,14 @@ async function renderManutencoes(){
   setLoading();
   manutPage = 0;
   const {data:manut}=await db.from('manutencoes').select(`*, perfis(nome), equipamentos(tipo,marca,modelo,patrimonio,laboratorio_id,laboratorios(numero,nome))`).order('criado_em',{ascending:false});
-  manutDataFull=manut||[];
-  manutData=manut||[];
+  const manutSorted = (manut||[]).sort((a,b) => {
+    const order = {aberto:0, em_andamento:1, resolvido:2};
+    const so = (order[a.status]??1) - (order[b.status]??1);
+    if (so !== 0) return so;
+    return new Date(b.criado_em) - new Date(a.criado_em);
+  });
+  manutDataFull=manutSorted;
+  manutData=[...manutSorted];
   document.getElementById('topbar-actions').innerHTML=`<button class="btn btn-ghost btn-sm" onclick="exportCSV(manutData,'manutencoes.csv')">⬇ CSV</button><button class="btn btn-ghost btn-sm" onclick="exportPDF('manutencoes')">⬇ PDF</button>${canEdit()?'<button class="btn btn-red" onclick="modalNovaManutLivre()">＋ Chamado</button>':''}`;
   const content=document.getElementById('page-content');
   const abertos=manutData.filter(m=>m.status!=='resolvido').length;
@@ -1539,8 +1561,8 @@ async function confirmDeleteManut(id){
 async function renderSoftwares(){
   setLoading();
   const [{data:sws},{data:labs}] = await Promise.all([
-    db.from('softwares').select(`*, laboratorios(nome,numero), equipamentos(marca,modelo,patrimonio)`).order('nome'),
-    db.from('laboratorios').select('*').order('numero')
+    db.from('softwares').select(`*, laboratorios(nome,numero,andar), equipamentos(marca,modelo,patrimonio)`).order('nome'),
+    db.from('laboratorios').select('*').order('andar').order('numero')
   ]);
   const actions = canEdit() ? `<button class="btn btn-ghost btn-sm" onclick="exportPDF('softwares')">⬇ PDF</button><button class="btn btn-red" onclick="modalNovoSw()">＋ Software</button>` : `<button class="btn btn-ghost btn-sm" onclick="exportPDF('softwares')">⬇ PDF</button>`;
   document.getElementById('topbar-actions').innerHTML = actions;
@@ -1718,7 +1740,7 @@ async function deleteSw(id){
 async function renderUsuarios(){
   setLoading();
   if(!isAdmin()){setContent('<div class="empty-state"><div class="es-icon">🔒</div><h3>Acesso Restrito</h3><p>Apenas administradores podem gerenciar usuários.</p></div>');return;}
-  const {data:perfis}=await db.from('perfis').select('*').order('nome');
+  const {data:perfis}=await db.from('perfis').select('*').order('role').order('nome');
   document.getElementById('topbar-actions').innerHTML=`<button class="btn btn-ghost btn-sm" onclick="modalAlterarSenha('${currentUser.id}',true)">🔑 Minha Senha</button><button class="btn btn-red" onclick="modalNovoUsuario()">＋ Usuário</button>`;
   const rows=(perfis||[]).map(p=>`<tr>
     <td><div style="display:flex;align-items:center;gap:10px"><div style="width:32px;height:32px;border-radius:50%;background:${p.id===currentUser.id?'var(--blue)':'var(--red)'};display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px">${(p.nome||'?')[0].toUpperCase()}</div><div><div style="font-size:13px;font-weight:600">${p.nome}${p.id===currentUser.id?' <span style="font-size:10px;color:var(--text2)">(você)</span>':''}</div></div></div></td>
@@ -3726,13 +3748,13 @@ async function checkAlertas() {
   } catch(e) { console.warn('checkAlertas:', e); }
 }
 
-async function renderAlertas() {
+async function renderAlertas() { // críticos primeiro
   setLoading();
   await checkAlertas();
   const { data: alertas } = await db.from('alertas')
     .select(`*, laboratorios(numero,nome,andar), equipamentos(marca,modelo,patrimonio)`)
     .order('prioridade', {ascending:false})
-    .order('criado_em', {ascending:false});
+    .order('resolvido').order('criado_em', {ascending:false});
 
   document.getElementById('topbar-actions').innerHTML = `
     <button class="btn btn-ghost btn-sm" onclick="checkAlertas().then(renderAlertas)">🔄 Verificar Agora</button>
@@ -3808,7 +3830,7 @@ async function resolverTodosAlertas() {
 // ███████╗  LOGS DE ACESSO
 // ============================================================
 
-async function renderLogs() {
+async function renderLogs() { // ordenado por data decrescente
   setLoading();
   if(!isAdmin()){
     setContent('<div class="empty-state"><div class="es-icon">🔒</div><h3>Acesso Restrito</h3><p>Apenas administradores podem visualizar os logs.</p></div>');
