@@ -423,7 +423,7 @@
       <div class="nav-item" onclick="navTo('manutencoes')"><span class="icon">🔧</span> Manutenções</div>
       <div class="nav-item" onclick="navTo('softwares')"><span class="icon">📦</span> Softwares</div>
       <div class="nav-section">Inventário</div>
-      <div class="nav-item" onclick="navTo('inventario_aimores')"><span class="icon">📦</span> Inventário Aimorés</div>
+      <div id="nav-inventario-items"></div>
       <div class="nav-item" id="nav-alertas" onclick="navTo('alertas')"><span class="icon">🚨</span> Alertas <span id="alertas-badge" style="display:none;margin-left:auto;background:var(--red);color:#fff;border-radius:20px;font-size:10px;font-weight:700;padding:2px 7px;min-width:18px;text-align:center"></span></div>
       <div class="nav-item" onclick="navTo('logs')"><span class="icon">📝</span> Logs de Acesso</div>
       <div class="nav-item" onclick="navTo('importar_planilha')"><span class="icon">📤</span> Importar Planilha</div>
@@ -700,6 +700,7 @@ async function initApp() {
   document.getElementById('user-avatar').textContent = (perfil?.nome || currentUser.email)[0].toUpperCase();
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app').style.display = 'block';
+  renderNavUnidades(); // carrega unidades no sidebar
   setupRealtime();
   showPage('dashboard');
   // Iniciar monitoramento de alertas
@@ -777,8 +778,16 @@ function showPage(page) {
   document.querySelectorAll('.nav-item').forEach(el => {
     if (el.getAttribute('onclick')?.includes(`'${page}'`)) el.classList.add('active');
   });
-  const titles = { dashboard:'Dashboard', predios:'Prédios', laboratorios:'Laboratórios', lab3d:'Laboratórios 3D', equipamentos:'Equipamentos', manutencoes:'Manutenções', softwares:'Softwares', usuarios:'Usuários', relatorios:'Relatórios', inventario_aimores:'📦 Inventário Aimorés', alertas:'🚨 Central de Alertas', logs:'📝 Logs de Acesso', importar_planilha:'📤 Importar Planilha' };
-  document.getElementById('page-title').textContent = titles[page] || page;
+  const titles = { dashboard:'Dashboard', predios:'Prédios', laboratorios:'Laboratórios', lab3d:'Laboratórios 3D', equipamentos:'Equipamentos', manutencoes:'Manutenções', softwares:'Softwares', usuarios:'Usuários', relatorios:'Relatórios', inventario_aimores:'📦 Inventário Aimorés', alertas:'🚨 Central de Alertas', logs:'📝 Logs de Acesso', importar_planilha:'📤 Importar Planilha', gerenciar_unidades:'🏛 Gerenciar Unidades' };
+  // Título dinâmico para unidades
+  if (page.startsWith('inventario_')) {
+    const unitKey = page.replace('inventario_','');
+    const reg = getUnitsRegistry();
+    const u = reg[unitKey] || { name: unitKey, emoji: '📦' };
+    document.getElementById('page-title').textContent = `${u.emoji} Inventário ${u.name}`;
+  } else {
+    document.getElementById('page-title').textContent = titles[page] || page;
+  }
   document.getElementById('topbar-actions').innerHTML = '';
 
   const lab3dEl = document.getElementById('page-lab3d');
@@ -791,8 +800,13 @@ function showPage(page) {
   } else {
     contentEl.style.display = '';
     lab3dEl.classList.remove('visible');
-    const pages = { dashboard:renderDashboard, predios:renderPredios, laboratorios:renderLaboratorios, equipamentos:renderEquipamentos, manutencoes:renderManutencoes, softwares:renderSoftwares, usuarios:renderUsuarios, relatorios:renderRelatorios, inventario_aimores:renderInventarioAimores, alertas:renderAlertas, logs:renderLogs, importar_planilha:renderImportarPlanilha };
-    if (pages[page]) pages[page]();
+    const pages = { dashboard:renderDashboard, predios:renderPredios, laboratorios:renderLaboratorios, equipamentos:renderEquipamentos, manutencoes:renderManutencoes, softwares:renderSoftwares, usuarios:renderUsuarios, relatorios:renderRelatorios, inventario_aimores:renderInventarioAimores, alertas:renderAlertas, logs:renderLogs, importar_planilha:renderImportarPlanilha, gerenciar_unidades:renderGerenciarUnidades };
+    if (page.startsWith('inventario_') && !pages[page]) {
+      const unitKey = page.replace('inventario_','');
+      renderInventarioUnidade(unitKey);
+    } else if (pages[page]) {
+      pages[page]();
+    }
   }
 }
 
@@ -2508,34 +2522,95 @@ let _aimState = {
 };
 const AIM_PAGE = 25;
 
+// ── REGISTRO DE UNIDADES ──
+let _currentUnit = 'aimores'; // unidade ativa no momento
+
+function getUnitsRegistry() {
+  try {
+    const raw = localStorage.getItem('nati_units_registry');
+    if (raw) return JSON.parse(raw);
+  } catch(e) {}
+  // Default: apenas Aimorés pré-cadastrada
+  return {
+    aimores: { name: 'Aimorés', emoji: '🏫', color: '#c8102e', createdAt: '2024-01-01' }
+  };
+}
+
+function saveUnitsRegistry(reg) {
+  try { localStorage.setItem('nati_units_registry', JSON.stringify(reg)); } catch(e) {}
+}
+
+function getUnitDataKey(unitKey, type) {
+  if (unitKey === 'aimores') {
+    // Aimorés usa chaves legadas por compatibilidade
+    return { labs: 'aim_labs', salas: 'aim_salas', admin: 'aim_admin' }[type];
+  }
+  return `aim_${unitKey}_${type}`;
+}
+
+// Retorna os dados estáticos de uma unidade (apenas Aimorés tem dados hardcoded)
+function getUnitStaticData(unitKey) {
+  if (unitKey === 'aimores') return AIMORES_DATA;
+  // Outras unidades: estrutura vazia
+  return { labs: {}, salas: [], administrativo: [] };
+}
+
+// Renderiza dinamicamente os itens de nav do inventário
+function renderNavUnidades() {
+  const reg = getUnitsRegistry();
+  const container = document.getElementById('nav-inventario-items');
+  if (!container) return;
+  container.innerHTML = Object.entries(reg).map(([key, u]) =>
+    `<div class="nav-item" onclick="navTo('inventario_${key}')" id="nav-inv-${key}">
+      <span class="icon">${u.emoji||'📦'}</span> ${u.name}
+    </div>`
+  ).join('') +
+  `<div class="nav-item" onclick="navTo('gerenciar_unidades')" style="opacity:.75;font-size:11px">
+    <span class="icon">➕</span> Gerenciar Unidades
+  </div>`;
+}
+
 // ── INICIALIZAR DADOS ──
-function aimInit() {
-  // clona dados para permitir edição local
-  _aimState.salas   = JSON.parse(JSON.stringify(AIMORES_DATA.salas));
-  _aimState.admin   = JSON.parse(JSON.stringify(AIMORES_DATA.administrativo));
-  // labs: mapeia cada lab para array de machines clonado
+function aimInit(unitKey) {
+  unitKey = unitKey || _currentUnit;
+  const staticData = getUnitStaticData(unitKey);
+  _aimState.salas   = JSON.parse(JSON.stringify(staticData.salas || []));
+  _aimState.admin   = JSON.parse(JSON.stringify(staticData.administrativo || []));
   _aimState.labsData = {};
-  Object.keys(AIMORES_DATA.labs).forEach(k => {
-    _aimState.labsData[k] = JSON.parse(JSON.stringify(AIMORES_DATA.labs[k].machines));
+  Object.keys(staticData.labs || {}).forEach(k => {
+    _aimState.labsData[k] = JSON.parse(JSON.stringify(staticData.labs[k].machines || []));
   });
 }
 
 // ── PERSISTÊNCIA SIMPLES (localStorage) ──
-function aimSave() {
-  try { localStorage.setItem('aim_labs', JSON.stringify(_aimState.labsData)); localStorage.setItem('aim_salas', JSON.stringify(_aimState.salas)); localStorage.setItem('aim_admin', JSON.stringify(_aimState.admin)); } catch(e){}
-}
-function aimLoad() {
+function aimSave(unitKey) {
+  unitKey = unitKey || _currentUnit;
   try {
-    const l = localStorage.getItem('aim_labs');   if (l) _aimState.labsData = JSON.parse(l);
-    const s = localStorage.getItem('aim_salas');  if (s) _aimState.salas = JSON.parse(s);
-    const a = localStorage.getItem('aim_admin');  if (a) _aimState.admin = JSON.parse(a);
+    localStorage.setItem(getUnitDataKey(unitKey,'labs'), JSON.stringify(_aimState.labsData));
+    localStorage.setItem(getUnitDataKey(unitKey,'salas'), JSON.stringify(_aimState.salas));
+    localStorage.setItem(getUnitDataKey(unitKey,'admin'), JSON.stringify(_aimState.admin));
+  } catch(e){}
+}
+function aimLoad(unitKey) {
+  unitKey = unitKey || _currentUnit;
+  try {
+    const l = localStorage.getItem(getUnitDataKey(unitKey,'labs'));   if (l) _aimState.labsData = JSON.parse(l);
+    const s = localStorage.getItem(getUnitDataKey(unitKey,'salas'));  if (s) _aimState.salas = JSON.parse(s);
+    const a = localStorage.getItem(getUnitDataKey(unitKey,'admin'));  if (a) _aimState.admin = JSON.parse(a);
   } catch(e) {}
 }
 
-// ── RENDER PRINCIPAL ──
-function renderInventarioAimores() {
-  aimInit();
-  aimLoad(); // carrega edições salvas
+// ── RENDER PRINCIPAL (compatibilidade) ──
+function renderInventarioAimores() { renderInventarioUnidade('aimores'); }
+
+// ── RENDER GENÉRICO POR UNIDADE ──
+function renderInventarioUnidade(unitKey) {
+  _currentUnit = unitKey;
+  const reg = getUnitsRegistry();
+  const unit = reg[unitKey] || { name: unitKey, emoji: '📦', color: '#c8102e' };
+
+  aimInit(unitKey);
+  aimLoad(unitKey); // carrega edições salvas
 
   const labKeys = Object.keys(AIMORES_DATA.labs);
   const totalMaquinas = labKeys.reduce((s,k)=>s+(_aimState.labsData[k]||[]).length,0);
@@ -2546,6 +2621,8 @@ function renderInventarioAimores() {
     <button class="btn btn-ghost btn-sm" onclick="aimExportCSV()">⬇ Exportar CSV</button>
     <button class="btn btn-ghost btn-sm" onclick="aimImportToSystem()" title="Importar labs para o banco Supabase">☁ Importar para Sistema</button>
   `;
+  // Atualiza título da página
+  document.getElementById('page-title').textContent = `${unit.emoji} Inventário ${unit.name}`;
 
   setContent(`
   <style>
@@ -2606,23 +2683,29 @@ function aimShowTab(tab) {
 
 // ── LISTA DE LABS ──
 function aimRenderLabsList() {
-  const labKeys = Object.keys(AIMORES_DATA.labs);
+  const staticData = getUnitStaticData(_currentUnit);
+  const labKeys = Object.keys(_aimState.labsData);
   const cards = labKeys.map(k => {
-    const meta = AIMORES_DATA.labs[k].meta;
+    const meta = (staticData.labs[k] || {}).meta || { andar: '?', tipo: 'ti', cap: '?' };
     const machines = _aimState.labsData[k] || [];
     const isSelected = _aimState.currentLab === k;
     return `<div class="aim-lab-card${isSelected?' selected':''}" onclick="aimSelectLab('${k}')">
-      <div class="alc-num">Andar ${meta.andar} · ${meta.tipo.toUpperCase()}</div>
+      <div class="alc-num">Andar ${meta.andar} · ${(meta.tipo||'ti').toUpperCase()}</div>
       <div class="alc-name">${k}</div>
       <div class="alc-qty">${machines.length}</div>
       <div class="alc-sub">máquinas cadastradas</div>
-      <div style="margin-top:10px;display:flex;gap:6px">
-        <span class="badge badge-blue" style="font-size:10px">Cap. ${meta.cap}</span>
+      <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap">
+        <span class="badge badge-blue" style="font-size:10px">Cap. ${meta.cap||'?'}</span>
+        <button class="btn btn-ghost" style="font-size:10px;padding:2px 8px;height:auto" onclick="event.stopPropagation();aimDeleteLab('${k}')">🗑</button>
       </div>
     </div>`;
   }).join('');
+
   document.getElementById('aim-content').innerHTML = `
-    <div class="aim-lab-grid">${cards}</div>
+    <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+      <button class="btn btn-red btn-sm" onclick="aimAddLabModal()">➕ Novo Laboratório</button>
+    </div>
+    <div class="aim-lab-grid">${cards.length ? cards : '<p style="color:var(--text2);font-size:13px">Nenhum laboratório cadastrado ainda. Clique em <strong>Novo Laboratório</strong> para começar.</p>'}</div>
     <div id="aim-lab-detail"></div>
   `;
 }
@@ -2633,6 +2716,52 @@ function aimSelectLab(labKey) {
   _aimState.filter = '';
   _aimState.page = 0;
   aimRenderLabMachines();
+}
+
+// ── ADICIONAR LAB ──
+function aimAddLabModal() {
+  openModal('➕ Novo Laboratório', `
+    <div class="form-group"><label>Nome do Lab</label><input id="aim-new-lab-nome" class="form-control" placeholder="Ex: LAB 301" /></div>
+    <div class="form-row">
+      <div class="form-group"><label>Andar</label><input id="aim-new-lab-andar" class="form-control" placeholder="3" type="number" /></div>
+      <div class="form-group"><label>Capacidade</label><input id="aim-new-lab-cap" class="form-control" placeholder="30" type="number" /></div>
+    </div>
+    <div class="form-group"><label>Tipo</label>
+      <select id="aim-new-lab-tipo" class="form-control">
+        <option value="ti">TI</option><option value="multi">Multimídia</option><option value="outro">Outro</option>
+      </select>
+    </div>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+     <button class="btn btn-red" onclick="aimConfirmAddLab()">Criar Lab</button>`
+  );
+}
+function aimConfirmAddLab() {
+  const nome = document.getElementById('aim-new-lab-nome').value.trim();
+  if (!nome) { toast('Informe o nome do lab','error'); return; }
+  const andar = document.getElementById('aim-new-lab-andar').value || '?';
+  const cap = document.getElementById('aim-new-lab-cap').value || '?';
+  const tipo = document.getElementById('aim-new-lab-tipo').value;
+  if (_aimState.labsData[nome]) { toast('Já existe um lab com esse nome','error'); return; }
+  _aimState.labsData[nome] = [];
+  aimSave(_currentUnit);
+  closeModal();
+  toast(`Lab "${nome}" criado!`, 'success');
+  aimRenderLabsList();
+}
+function aimDeleteLab(labKey) {
+  const count = (_aimState.labsData[labKey] || []).length;
+  openModal(`🗑 Excluir Lab "${labKey}"`,
+    `<p>Este lab possui <strong>${count} máquina(s)</strong>. Deseja excluir permanentemente?</p>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+     <button class="btn btn-red" onclick="aimConfirmDeleteLab('${labKey}')">Excluir</button>`
+  );
+}
+function aimConfirmDeleteLab(labKey) {
+  delete _aimState.labsData[labKey];
+  aimSave(_currentUnit);
+  closeModal();
+  toast(`Lab "${labKey}" excluído`, 'info');
+  aimRenderLabsList();
 }
 
 function aimRenderLabMachines() {
@@ -3115,12 +3244,12 @@ function aimExportLabCSV(labKey) {
 function aimExportSalasCSV() {
   const headers = ['nome','proj_fabricante','proj_modelo','proj_patrimonio','proj_serie','horas_mais_brilho','horas_menos_brilho','amplificador','amp_patrimonio','caixas_som','interruptor','vga','rede','hdmi','tela','tomadas'];
   const rows = _aimState.salas.map(s => headers.map(h=>`"${(s[h]||'').replace(/"/g,'""')}"`).join(','));
-  aimDownloadCSV([headers.join(','),...rows].join('\n'),'salas_aimores.csv');
+  aimDownloadCSV([headers.join(','),...rows].join('\n'),`salas_${_currentUnit}.csv`);
 }
 function aimExportAdminCSV() {
   const headers = ['campus','setor','tipo','sistema','modelo','numero_serie','patrimonio','processador','memoria','armazenamento','monitor_modelo','monitor_serie','monitor_patrimonio','mouse','teclado'];
   const rows = _aimState.admin.map(a => headers.map(h=>`"${(a[h]||'').replace(/"/g,'""')}"`).join(','));
-  aimDownloadCSV([headers.join(','),...rows].join('\n'),'administrativo_aimores.csv');
+  aimDownloadCSV([headers.join(','),...rows].join('\n'),`administrativo_${_currentUnit}.csv`);
 }
 function aimExportCSV() {
   if (_aimState.view==='labs' && _aimState.currentLab) { aimExportLabCSV(_aimState.currentLab); return; }
@@ -3132,7 +3261,7 @@ function aimExportCSV() {
   Object.keys(_aimState.labsData).forEach(k => {
     (_aimState.labsData[k]||[]).forEach(m => rows.push([k,...headers.slice(1).map(h=>`"${(m[h]||'').replace(/"/g,'""')}"`)]));
   });
-  aimDownloadCSV([headers.join(','),...rows.map(r=>r.join(','))].join('\n'),'inventario_completo_aimores.csv');
+  aimDownloadCSV([headers.join(','),...rows.map(r=>r.join(','))].join('\n'),`inventario_completo_${_currentUnit}.csv`);
 }
 function aimDownloadCSV(csv, filename) {
   const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8;'});
@@ -3233,6 +3362,152 @@ async function aimDoImport() {
   closeModal();
   if (errors) toast(`Importação concluída com erros. ${total} equipamentos inseridos.`, 'info');
   else toast(`✅ ${total} equipamentos importados com sucesso!`, 'success');
+}
+
+// ============================================================
+// ███████╗  GERENCIAR UNIDADES
+// ============================================================
+
+function renderGerenciarUnidades() {
+  const reg = getUnitsRegistry();
+  const rows = Object.entries(reg).map(([key, u]) => {
+    const labsKey = getUnitDataKey(key, 'labs');
+    let numLabs = 0, numMaquinas = 0;
+    try {
+      const d = JSON.parse(localStorage.getItem(labsKey) || 'null');
+      if (d) { numLabs = Object.keys(d).length; numMaquinas = Object.values(d).reduce((s,a)=>s+a.length,0); }
+      else if (key === 'aimores') { numLabs = Object.keys(AIMORES_DATA.labs).length; numMaquinas = Object.values(AIMORES_DATA.labs).reduce((s,v)=>s+v.machines.length,0); }
+    } catch(e) {}
+    const isAimores = key === 'aimores';
+    return `<tr>
+      <td><span style="font-size:20px">${u.emoji||'📦'}</span></td>
+      <td><strong>${u.name}</strong><br><span style="font-size:11px;color:var(--text2)">${key}</span></td>
+      <td class="td-mono">${numLabs}</td>
+      <td class="td-mono">${numMaquinas}</td>
+      <td><span style="font-size:11px;color:var(--text2)">${u.createdAt||'—'}</span></td>
+      <td>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-ghost btn-sm" onclick="navTo('inventario_${key}')">📂 Abrir</button>
+          <button class="btn btn-ghost btn-sm" onclick="aimEditUnit('${key}')">✏️</button>
+          ${!isAimores ? `<button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="aimDeleteUnit('${key}')">🗑</button>` : '<span style="font-size:11px;color:var(--text2);padding:4px">padrão</span>'}
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+
+  setContent(`
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px">
+      <div>
+        <div style="font-size:22px;font-weight:800;font-family:'Syne',sans-serif">🏛 Unidades</div>
+        <div style="font-size:13px;color:var(--text2);margin-top:4px">Gerencie os inventários de cada campus</div>
+      </div>
+      <button class="btn btn-red" onclick="aimNewUnitModal()">➕ Nova Unidade</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th></th><th>Unidade</th><th>Labs</th><th>Máquinas</th><th>Criado em</th><th>Ações</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+    <div style="margin-top:32px;padding:20px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius)">
+      <div style="font-size:14px;font-weight:700;margin-bottom:8px">💡 Como funciona</div>
+      <div style="font-size:13px;color:var(--text2);line-height:1.7">
+        Cada unidade tem seu próprio inventário de <strong>Laboratórios</strong>, <strong>Salas de Aula</strong> e <strong>Administrativo</strong> — totalmente independentes.<br>
+        Os dados ficam salvos no navegador (localStorage). Exporte CSVs para backup ou importar para o banco Supabase.<br>
+        A unidade <strong>Aimorés</strong> vem pré-carregada com dados do inventário físico real.
+      </div>
+    </div>
+  `);
+}
+
+function aimNewUnitModal() {
+  openModal('➕ Nova Unidade', `
+    <div class="form-row">
+      <div class="form-group" style="flex:2"><label>Nome da Unidade *</label><input id="nu-nome" class="form-control" placeholder="Ex: Liberdade, BH, Contagem..." /></div>
+      <div class="form-group" style="flex:1"><label>Emoji</label><input id="nu-emoji" class="form-control" placeholder="🏫" maxlength="4" /></div>
+    </div>
+    <div class="form-group"><label>Identificador (chave única, sem espaços)</label>
+      <input id="nu-key" class="form-control" placeholder="Ex: liberdade" oninput="this.value=this.value.toLowerCase().replace(/[^a-z0-9_]/g,'')" />
+      <div style="font-size:11px;color:var(--text2);margin-top:4px">Use letras minúsculas e números apenas. Ex: liberdade, bh_norte</div>
+    </div>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+     <button class="btn btn-red" onclick="aimConfirmNewUnit()">Criar Unidade</button>`
+  );
+  // Auto-preenche key a partir do nome
+  document.getElementById('nu-nome').addEventListener('input', function() {
+    document.getElementById('nu-key').value = this.value.toLowerCase().normalize('NFD').replace(/[^a-z0-9]/gi,'').slice(0,20);
+  });
+}
+
+function aimConfirmNewUnit() {
+  const nome = document.getElementById('nu-nome').value.trim();
+  const key  = document.getElementById('nu-key').value.trim();
+  const emoji = document.getElementById('nu-emoji').value.trim() || '📦';
+  if (!nome || !key) { toast('Preencha nome e identificador', 'error'); return; }
+  const reg = getUnitsRegistry();
+  if (reg[key]) { toast('Já existe uma unidade com esse identificador', 'error'); return; }
+  reg[key] = { name: nome, emoji, color: '#c8102e', createdAt: new Date().toISOString().slice(0,10) };
+  saveUnitsRegistry(reg);
+  // Inicializa dados vazios
+  try {
+    localStorage.setItem(getUnitDataKey(key,'labs'), JSON.stringify({}));
+    localStorage.setItem(getUnitDataKey(key,'salas'), JSON.stringify([]));
+    localStorage.setItem(getUnitDataKey(key,'admin'), JSON.stringify([]));
+  } catch(e) {}
+  renderNavUnidades();
+  closeModal();
+  toast(`Unidade "${nome}" criada! Abrindo inventário...`, 'success');
+  setTimeout(() => navTo(`inventario_${key}`), 600);
+}
+
+function aimEditUnit(key) {
+  const reg = getUnitsRegistry();
+  const u = reg[key];
+  openModal(`✏️ Editar Unidade "${u.name}"`, `
+    <div class="form-row">
+      <div class="form-group" style="flex:2"><label>Nome</label><input id="eu-nome" class="form-control" value="${u.name}" /></div>
+      <div class="form-group" style="flex:1"><label>Emoji</label><input id="eu-emoji" class="form-control" value="${u.emoji||'📦'}" maxlength="4" /></div>
+    </div>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+     <button class="btn btn-red" onclick="aimConfirmEditUnit('${key}')">Salvar</button>`
+  );
+}
+function aimConfirmEditUnit(key) {
+  const nome = document.getElementById('eu-nome').value.trim();
+  const emoji = document.getElementById('eu-emoji').value.trim() || '📦';
+  if (!nome) { toast('Informe o nome', 'error'); return; }
+  const reg = getUnitsRegistry();
+  reg[key].name = nome; reg[key].emoji = emoji;
+  saveUnitsRegistry(reg);
+  renderNavUnidades();
+  closeModal();
+  toast('Unidade atualizada!', 'success');
+  renderGerenciarUnidades();
+}
+
+function aimDeleteUnit(key) {
+  const reg = getUnitsRegistry();
+  const u = reg[key];
+  openModal(`🗑 Excluir Unidade "${u.name}"`,
+    `<p style="color:var(--red)"><strong>⚠️ Atenção:</strong> Todos os dados do inventário desta unidade serão apagados permanentemente.</p><p>Tem certeza?</p>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+     <button class="btn btn-red" onclick="aimConfirmDeleteUnit('${key}')">Excluir Tudo</button>`
+  );
+}
+function aimConfirmDeleteUnit(key) {
+  const reg = getUnitsRegistry();
+  delete reg[key];
+  saveUnitsRegistry(reg);
+  // Apaga dados do localStorage
+  try {
+    localStorage.removeItem(getUnitDataKey(key,'labs'));
+    localStorage.removeItem(getUnitDataKey(key,'salas'));
+    localStorage.removeItem(getUnitDataKey(key,'admin'));
+  } catch(e) {}
+  renderNavUnidades();
+  closeModal();
+  toast('Unidade excluída', 'info');
+  renderGerenciarUnidades();
 }
 
 // ============================================================
