@@ -215,6 +215,21 @@
   .row-sem-pat { opacity:0.75; }
   .pat-missing { font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--orange); background:rgba(255,152,0,0.1); padding:2px 6px; border-radius:4px; }
 
+  /* ---- BULK SELECTION ---- */
+  .equip-cb { width:16px; height:16px; cursor:pointer; accent-color:var(--red); flex-shrink:0; }
+  .th-cb, .td-cb { width:36px; padding:12px 8px 12px 16px !important; }
+  tr.row-selected { background:rgba(200,16,46,0.07) !important; }
+  #bulk-bar {
+    display:none; align-items:center; gap:12px;
+    background:rgba(200,16,46,0.12); border:1px solid rgba(200,16,46,0.3);
+    border-radius:var(--radius-sm); padding:10px 16px; margin-bottom:12px;
+    animation:fadeUp 0.2s ease;
+  }
+  #bulk-bar.visible { display:flex; }
+  #bulk-bar .bulk-count { font-size:13px; font-weight:600; color:var(--red); flex:1; }
+  #bulk-bar .bulk-info  { font-size:12px; color:var(--text2); }
+  /* ---- END BULK SELECTION ---- */
+
   /* HISTORY PANEL */
   .hist-list { display:flex; flex-direction:column; gap:8px; margin-top:8px; }
   .hist-item { background:var(--bg3); border-radius:8px; padding:12px 14px; border-left:3px solid var(--border2); }
@@ -615,6 +630,7 @@ let _formDirty = false;
 // Pagination state
 const PAGE_SIZE = 50;
 let equipPage = 0;
+let selectedEquips = new Set(); // IDs selecionados para exclusão em lote
 let manutPage = 0;
 
 // 3D state
@@ -780,6 +796,7 @@ function showPage(page) {
   const titles = { dashboard:'Dashboard', predios:'Prédios', laboratorios:'Laboratórios', lab3d:'Laboratórios 3D', equipamentos:'Equipamentos', manutencoes:'Manutenções', softwares:'Softwares', usuarios:'Usuários', relatorios:'Relatórios', inventario_aimores:'📦 Inventário Aimorés', alertas:'🚨 Central de Alertas', logs:'📝 Logs de Acesso', importar_planilha:'📤 Importar Planilha' };
   document.getElementById('page-title').textContent = titles[page] || page;
   document.getElementById('topbar-actions').innerHTML = '';
+  if(currentPage !== 'equipamentos') { selectedEquips.clear(); }
 
   const lab3dEl = document.getElementById('page-lab3d');
   const contentEl = document.getElementById('page-content');
@@ -1138,7 +1155,7 @@ async function renderEquipamentos() {
   const predioOpts = (predios||[]).map(p=>`<option value="${p.id}">${p.nome}</option>`).join('');
   const sem_pat_count = equipData.filter(e=>!e.patrimonio).length;
 
-  if (canEdit()) document.getElementById('topbar-actions').innerHTML = `<button class="btn btn-ghost btn-sm" onclick="exportCSV(equipData,'equipamentos.csv')">⬇ CSV</button><button class="btn btn-ghost btn-sm" onclick="exportPDF('equipamentos')">⬇ PDF</button><button class="btn btn-red" onclick="modalNovoEquip()">＋ Equipamento</button>`;
+  if (canEdit()) document.getElementById('topbar-actions').innerHTML = `<button class="btn btn-ghost btn-sm" onclick="exportCSV(equipData,'equipamentos.csv')">⬇ CSV</button><button class="btn btn-ghost btn-sm" onclick="exportPDF('equipamentos')">⬇ PDF</button>${isAdmin()?`<button class="btn btn-ghost btn-sm" id="btn-bulk-delete" onclick="bulkDeleteEquips()" style="color:var(--red);display:none">🗑 Excluir Selecionados (<span id="bulk-count-btn">0</span>)</button>`:''}<button class="btn btn-red" onclick="modalNovoEquip()">＋ Equipamento</button>`;
 
   const content = document.getElementById('page-content');
   content.innerHTML = `
@@ -1197,11 +1214,167 @@ function renderEquipPage() {
   const tbody=document.getElementById('equip-tbody');
   const pgEl=document.getElementById('equip-pagination');
   if(!tbody)return;
+
+  // --- Barra de seleção em lote (injeta antes da tabela se ainda não existe) ---
+  if(isAdmin()) {
+    let bulkBar = document.getElementById('bulk-bar');
+    if(!bulkBar) {
+      const tableCard = document.querySelector('.table-card');
+      if(tableCard) {
+        const bar = document.createElement('div');
+        bar.id = 'bulk-bar';
+        bar.innerHTML = `
+          <span class="bulk-count"><span id="bulk-bar-count">0</span> equipamento(s) selecionado(s)</span>
+          <span class="bulk-info">Revise antes de excluir — a operação não pode ser desfeita</span>
+          <button class="btn btn-ghost btn-sm" onclick="clearEquipSelection()" style="color:var(--text2)">✕ Limpar</button>
+          <button class="btn btn-red btn-sm" onclick="bulkDeleteEquips()">🗑 Excluir Selecionados</button>`;
+        tableCard.insertBefore(bar, tableCard.firstChild);
+      }
+    }
+    updateBulkBar();
+  }
+
   const pageData = equipData.slice(equipPage*PAGE_SIZE, (equipPage+1)*PAGE_SIZE);
-  const rows=pageData.map(e=>{const lab=e.laboratorios,predio=lab?.predios;return`<tr id="equip-${e.id}" class="${!e.patrimonio?'row-sem-pat':''}"><td><strong>${e.tipo}</strong></td><td>${e.marca||'—'} ${e.modelo||''}</td><td class="td-mono">${e.patrimonio?e.patrimonio:`<span class="pat-missing">s/ pat.</span>`}</td><td class="td-mono">${e.numero_serie||'—'}</td><td>${lab?`${lab.numero} · ${lab.nome}`:'—'}</td><td>${predio?predioBadge(predio.nome,predio.cor):'—'}</td><td>${statusBadge(e.status)}</td><td class="actions-cell"><button class="btn btn-ghost btn-sm" onclick="showQR('${e.id}','${e.patrimonio||e.id}')">QR</button>${canEdit()?`<button class="btn btn-ghost btn-sm" onclick="modalEditEquip('${e.id}')">✏️</button><button class="btn btn-ghost btn-sm" onclick="modalNovaManut('${e.id}')">🔧</button>`:''}<button class="btn btn-ghost btn-sm" onclick="verHistoricoEquip('${e.id}')">📋</button></td></tr>`;}).join('');
-  tbody.innerHTML=rows||'<tr><td colspan="8"><div class="empty-state"><div class="es-icon">💻</div><h3>Nenhum equipamento</h3><p>Ajuste os filtros ou cadastre um novo</p>'+( canEdit()?'<br><button class="btn btn-red btn-sm" style="margin-top:12px" onclick="modalNovoEquip()">＋ Novo Equipamento</button>':'' )+'</div></td></tr>';
+
+  // Cabeçalho com checkbox "selecionar todos da página" para admin
+  const thead = tbody.closest('table')?.querySelector('thead tr');
+  if(thead && isAdmin()) {
+    if(!thead.querySelector('.th-cb')) {
+      const thCb = document.createElement('th');
+      thCb.className='th-cb';
+      thCb.innerHTML=`<input type="checkbox" class="equip-cb" id="cb-all-page" title="Selecionar página" onchange="toggleSelectPage(this.checked)">`;
+      thead.insertBefore(thCb, thead.firstChild);
+    }
+    // Atualiza estado do "selecionar todos" da página
+    const cbAll = document.getElementById('cb-all-page');
+    if(cbAll) {
+      const pageIds = pageData.map(e=>e.id);
+      cbAll.checked = pageIds.length > 0 && pageIds.every(id=>selectedEquips.has(id));
+      cbAll.indeterminate = pageIds.some(id=>selectedEquips.has(id)) && !cbAll.checked;
+    }
+  }
+
+  const rows=pageData.map(e=>{
+    const lab=e.laboratorios, predio=lab?.predios;
+    const isSelected = selectedEquips.has(e.id);
+    const cbCol = isAdmin()
+      ? `<td class="td-cb"><input type="checkbox" class="equip-cb" data-id="${e.id}" ${isSelected?'checked':''} onchange="toggleEquipSelect('${e.id}',this.checked)"></td>`
+      : '';
+    return `<tr id="equip-${e.id}" class="${!e.patrimonio?'row-sem-pat':''} ${isSelected?'row-selected':''}">
+      ${cbCol}
+      <td><strong>${e.tipo}</strong></td>
+      <td>${e.marca||'—'} ${e.modelo||''}</td>
+      <td class="td-mono">${e.patrimonio?e.patrimonio:`<span class="pat-missing">s/ pat.</span>`}</td>
+      <td class="td-mono">${e.numero_serie||'—'}</td>
+      <td>${lab?`${lab.numero} · ${lab.nome}`:'—'}</td>
+      <td>${predio?predioBadge(predio.nome,predio.cor):'—'}</td>
+      <td>${statusBadge(e.status)}</td>
+      <td class="actions-cell">
+        <button class="btn btn-ghost btn-sm" onclick="showQR('${e.id}','${e.patrimonio||e.id}')">QR</button>
+        ${canEdit()?`<button class="btn btn-ghost btn-sm" onclick="modalEditEquip('${e.id}')">✏️</button><button class="btn btn-ghost btn-sm" onclick="modalNovaManut('${e.id}')">🔧</button>`:''}
+        <button class="btn btn-ghost btn-sm" onclick="verHistoricoEquip('${e.id}')">📋</button>
+      </td>
+    </tr>`;
+  }).join('');
+
+  const colspan = isAdmin() ? '9' : '8';
+  tbody.innerHTML=rows||`<tr><td colspan="${colspan}"><div class="empty-state"><div class="es-icon">💻</div><h3>Nenhum equipamento</h3><p>Ajuste os filtros ou cadastre um novo</p>${canEdit()?'<br><button class="btn btn-red btn-sm" style="margin-top:12px" onclick="modalNovoEquip()">＋ Novo Equipamento</button>':''}</div></td></tr>`;
   if(pgEl) pgEl.innerHTML = buildPagination(equipData.length, equipPage, 'changeEquipPage', 'equip-pagination');
 }
+
+// --- Funções de seleção em lote ---
+function toggleEquipSelect(id, checked) {
+  if(checked) selectedEquips.add(id);
+  else selectedEquips.delete(id);
+  updateBulkBar();
+  // Atualiza visual da linha
+  const row = document.getElementById('equip-'+id);
+  if(row) row.classList.toggle('row-selected', checked);
+  // Atualiza checkbox "selecionar todos"
+  const pageData = equipData.slice(equipPage*PAGE_SIZE, (equipPage+1)*PAGE_SIZE);
+  const cbAll = document.getElementById('cb-all-page');
+  if(cbAll) {
+    const pageIds = pageData.map(e=>e.id);
+    cbAll.checked = pageIds.every(id=>selectedEquips.has(id));
+    cbAll.indeterminate = pageIds.some(id=>selectedEquips.has(id)) && !cbAll.checked;
+  }
+}
+
+function toggleSelectPage(checked) {
+  const pageData = equipData.slice(equipPage*PAGE_SIZE, (equipPage+1)*PAGE_SIZE);
+  pageData.forEach(e => {
+    if(checked) selectedEquips.add(e.id);
+    else selectedEquips.delete(e.id);
+    const row = document.getElementById('equip-'+e.id);
+    if(row) row.classList.toggle('row-selected', checked);
+  });
+  // Atualiza checkboxes individuais
+  document.querySelectorAll('.equip-cb[data-id]').forEach(cb => {
+    cb.checked = selectedEquips.has(cb.dataset.id);
+  });
+  updateBulkBar();
+}
+
+function clearEquipSelection() {
+  selectedEquips.clear();
+  document.querySelectorAll('.equip-cb[data-id]').forEach(cb=>cb.checked=false);
+  document.querySelectorAll('.row-selected').forEach(r=>r.classList.remove('row-selected'));
+  const cbAll = document.getElementById('cb-all-page');
+  if(cbAll) { cbAll.checked=false; cbAll.indeterminate=false; }
+  updateBulkBar();
+}
+
+function updateBulkBar() {
+  const n = selectedEquips.size;
+  // Barra flutuante
+  const bar = document.getElementById('bulk-bar');
+  if(bar) {
+    bar.classList.toggle('visible', n > 0);
+    const countEl = document.getElementById('bulk-bar-count');
+    if(countEl) countEl.textContent = n;
+  }
+  // Botão na topbar
+  const btnBulk = document.getElementById('btn-bulk-delete');
+  if(btnBulk) {
+    btnBulk.style.display = n > 0 ? '' : 'none';
+    const countBtn = document.getElementById('bulk-count-btn');
+    if(countBtn) countBtn.textContent = n;
+  }
+}
+
+async function bulkDeleteEquips() {
+  const n = selectedEquips.size;
+  if(n === 0) { toast('Nenhum equipamento selecionado','info'); return; }
+  if(!confirm(`Excluir ${n} equipamento(s) permanentemente?\n\nEssa ação não pode ser desfeita.`)) return;
+
+  const ids = [...selectedEquips];
+  let erros = 0;
+  toast(`Excluindo ${n} equipamento(s)...`, 'info');
+
+  // Exclui em lote usando .in()
+  const {error} = await db.from('equipamentos').delete().in('id', ids);
+  if(error) {
+    toast('Erro ao excluir: ' + error.message, 'error');
+    return;
+  }
+
+  // Log de auditoria
+  try {
+    await db.from('logs_acesso').insert(ids.map(id=>({
+      usuario_id: currentUser.id,
+      usuario_email: currentUser.email,
+      acao: 'excluir_lote',
+      tabela: 'equipamentos',
+      registro_id: id,
+      detalhes: { total_lote: n }
+    })));
+  } catch(e){}
+
+  selectedEquips.clear();
+  toast(`✓ ${n} equipamento(s) excluído(s) com sucesso!`);
+  renderEquipamentos();
+}
+// --- Fim seleção em lote ---
 
 async function refreshEquipamentos(){
   const {data:equips}=await db.from('equipamentos').select(`*, laboratorios(nome,numero,predio_id,predios(nome,cor))`).order('criado_em',{ascending:false});
