@@ -2768,31 +2768,62 @@ function aimShowTab(tab) {
 function aimRenderLabsList() {
   const staticData = getUnitStaticData(_currentUnit);
   const labKeys = Object.keys(_aimState.labsData);
-  const cards = labKeys.map(k => {
+
+  // Ordena por andar numérico, depois por nome
+  const labsComMeta = labKeys.map(k => {
     const meta = (staticData.labs[k] || {}).meta || { andar: '?', tipo: 'ti', cap: '?' };
-    const machines = _aimState.labsData[k] || [];
-    const isSelected = _aimState.currentLab === k;
-    return `<div class="aim-lab-card${isSelected?' selected':''}" onclick="aimSelectLab('${k}')">
-      <div class="alc-num">Andar ${meta.andar} · ${(meta.tipo||'ti').toUpperCase()}</div>
-      <div class="alc-name">${k}</div>
-      <div class="alc-qty">${machines.length}</div>
-      <div class="alc-sub">máquinas cadastradas</div>
-      <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap">
-        <span class="badge badge-blue" style="font-size:10px">Cap. ${meta.cap||'?'}</span>
-        <button class="btn btn-ghost" style="font-size:10px;padding:2px 8px;height:auto" onclick="event.stopPropagation();aimDeleteLab('${k}')">🗑</button>
-      </div>
-    </div>`;
+    return { key: k, meta, machines: _aimState.labsData[k] || [] };
+  }).sort((a, b) => {
+    const fa = parseInt(a.meta.andar) || 999;
+    const fb = parseInt(b.meta.andar) || 999;
+    if (fa !== fb) return fa - fb;
+    return a.key.localeCompare(b.key);
+  });
+
+  // Agrupa por andar
+  const porAndar = {};
+  labsComMeta.forEach(lab => {
+    const andar = lab.meta.andar || '?';
+    if (!porAndar[andar]) porAndar[andar] = [];
+    porAndar[andar].push(lab);
+  });
+
+  const grupos = Object.entries(porAndar).map(([andar, labs]) => {
+    const num = parseInt(andar);
+    const andarLabel = isNaN(num) ? 'Andar ?' : num === 0 ? 'Térreo' : `${num}º Andar`;
+    const badge = isNaN(num) ? '?' : String(num);
+    const cards = labs.map(({ key: k, meta, machines }) => {
+      const isSelected = _aimState.currentLab === k;
+      return `<div class="aim-lab-card${isSelected?' selected':''}" onclick="aimSelectLab('${k}')">
+        <div class="alc-num">${(meta.tipo||'ti').toUpperCase()}</div>
+        <div class="alc-name">${k}</div>
+        <div class="alc-qty">${machines.length}</div>
+        <div class="alc-sub">máquinas cadastradas</div>
+        <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap">
+          <span class="badge badge-blue" style="font-size:10px">Cap. ${meta.cap||'?'}</span>
+          <button class="btn btn-ghost" style="font-size:10px;padding:2px 8px;height:auto" onclick="event.stopPropagation();aimDeleteLab('${k}')">🗑</button>
+        </div>
+      </div>`;
+    }).join('');
+    return `
+      <div style="margin-bottom:28px">
+        <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text2);margin-bottom:10px;display:flex;align-items:center;gap:8px">
+          <span style="width:24px;height:24px;background:var(--red);color:#fff;border-radius:6px;font-size:11px;font-weight:800;display:inline-flex;align-items:center;justify-content:center">${badge}</span>
+          ${andarLabel}
+          <span style="color:var(--text2);font-weight:400;font-size:11px">(${labs.length} lab${labs.length>1?'s':''})</span>
+        </div>
+        <div class="aim-lab-grid">${cards}</div>
+      </div>`;
   }).join('');
 
   document.getElementById('aim-content').innerHTML = `
     <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
       <button class="btn btn-red btn-sm" onclick="aimAddLabModal()">➕ Novo Laboratório</button>
     </div>
-    <div class="aim-lab-grid">${cards.length ? cards : '<p style="color:var(--text2);font-size:13px">Nenhum laboratório cadastrado ainda. Clique em <strong>Novo Laboratório</strong> para começar.</p>'}</div>
+    ${grupos.length ? grupos : '<p style="color:var(--text2);font-size:13px">Nenhum laboratório cadastrado ainda. Clique em <strong>Novo Laboratório</strong> para começar.</p>'}
     <div id="aim-lab-detail"></div>
   `;
 }
-
 // ── SELECIONAR LAB ──
 function aimSelectLab(labKey) {
   _aimState.currentLab = labKey;
