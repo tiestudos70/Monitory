@@ -1193,9 +1193,9 @@ async function verLab(id) {
   const { data: lab } = await db.from('vw_lab_resumo').select('*').eq('id', id).single();
   const { data: equips } = await db.from('equipamentos').select('*').eq('laboratorio_id', id).order('tipo');
   const { data: sws } = await db.from('softwares').select('*, equipamentos(marca,modelo,patrimonio)').eq('laboratorio_id', id).order('nome');
-  const eRows = (equips||[]).map(e=>`<tr class="${!e.patrimonio?'row-sem-pat':''}"><td>${e.tipo}</td><td>${e.marca||'—'} ${e.modelo||''}</td><td class="td-mono">${e.patrimonio?e.patrimonio:`<span class="pat-missing">s/ pat.</span>`}</td><td>${statusBadge(e.status)}</td><td><button class="btn btn-ghost btn-sm" onclick="showQR('${e.id}','${e.patrimonio||e.id}')">QR</button><button class="btn btn-ghost btn-sm" onclick="closeModal();verHistoricoEquip('${e.id}')">📋</button></td></tr>`).join('');
+  const eRows = (equips||[]).map(e=>`<tr class="${!e.patrimonio?'row-sem-pat':''}"><td class="td-mono" style="font-size:11px">${e.nomenclatura||'—'}</td><td>${e.tipo}</td><td>${e.marca||'—'} ${e.modelo||''}</td><td class="td-mono">${e.patrimonio?e.patrimonio:`<span class="pat-missing">s/ pat.</span>`}</td><td>${statusBadge(e.status)}</td><td><button class="btn btn-ghost btn-sm" onclick="showQR('${e.id}','${e.patrimonio||e.id}')">QR</button><button class="btn btn-ghost btn-sm" onclick="closeModal();verHistoricoEquip('${e.id}')">📋</button>${canEdit()?`<button class="btn btn-ghost btn-sm" onclick="modalEditEquip('${e.id}')">✏️</button><button class="btn btn-ghost btn-sm" onclick="deleteEquip('${e.id}','${e.patrimonio||e.modelo||''}')">🗑</button>`:''}</td></tr>`).join('');
   const swRows = (sws||[]).map(s=>`<tr><td>${s.nome}${s.curso?` <small style="color:var(--text2)">(${s.curso})</small>`:''}</td><td>${s.versao||'—'}</td><td><span class="badge badge-blue">${s.licenca||'—'}</span></td><td style="font-size:11px;color:var(--text2)">${s.equipamentos?`🖥 ${s.equipamentos.marca||''} ${s.equipamentos.modelo||''}`:'Todo o lab'}</td></tr>`).join('');
-  const equipSection = equips?.length ? `<h4 style="margin-bottom:10px;font-size:13px;color:var(--text2)">EQUIPAMENTOS (${equips.length})</h4><div class="table-wrap"><table><thead><tr><th>Tipo</th><th>Marca/Modelo</th><th>Patrimônio</th><th>Status</th><th></th></tr></thead><tbody>${eRows}</tbody></table></div>` : '<p style="color:var(--text2);font-size:13px;margin-bottom:12px">Nenhum equipamento cadastrado.</p>';
+  const equipSection = equips?.length ? `<h4 style="margin-bottom:10px;font-size:13px;color:var(--text2)">EQUIPAMENTOS (${equips.length})</h4><div class="table-wrap"><table><thead><tr><th>Nomenclatura</th><th>Tipo</th><th>Marca/Modelo</th><th>Patrimônio</th><th>Status</th><th></th></tr></thead><tbody>${eRows}</tbody></table></div>` : '<p style="color:var(--text2);font-size:13px;margin-bottom:12px">Nenhum equipamento cadastrado.</p>';
   const swSection = sws?.length ? `<h4 style="margin:16px 0 10px;font-size:13px;color:var(--text2)">SOFTWARES (${sws.length})</h4><div class="table-wrap"><table><thead><tr><th>Nome</th><th>Versão</th><th>Licença</th><th>Escopo</th></tr></thead><tbody>${swRows}</tbody></table></div>` : '';
   openModal(`Lab ${lab?.numero} · ${lab?.nome}`, `<div class="detail-grid" style="margin-bottom:20px"><div class="detail-item"><div class="di-label">Prédio</div><div class="di-value">${predioBadge(lab?.predio||'—',lab?.predio_cor||'#666')}</div></div><div class="detail-item"><div class="di-label">Andar</div><div class="di-value">${lab?.andar}º</div></div><div class="detail-item"><div class="di-label">Total Máquinas</div><div class="di-value">${lab?.total_maquinas||0}</div></div><div class="detail-item"><div class="di-label">Tipo</div><div class="di-value">${lab?.tipo||'—'}</div></div></div>${equipSection}${swSection}`,`<button class="btn btn-ghost" onclick="closeModal()">Fechar</button><button class="btn btn-ghost" onclick="closeModal();goto3dLab('${id}')">🧊 Ver 3D</button>`);
 }
@@ -1298,7 +1298,7 @@ async function renderEquipamentos() {
     </div>
     <div id="bulk-bar" style="display:none;background:rgba(200,16,46,0.12);border:1px solid rgba(200,16,46,0.3);border-radius:8px;padding:10px 16px;margin-bottom:12px;align-items:center;gap:12px"><span id="bulk-count" style="font-size:13px;color:var(--text)">0 selecionados</span><button class="btn btn-red btn-sm" onclick="bulkDelete()">🗑 Excluir Selecionados</button><button class="btn btn-ghost btn-sm" onclick="clearSelection()">✕ Limpar</button></div>
     <div class="table-card">
-      <div class="table-wrap"><table><thead><tr><th style="width:36px"><input type="checkbox" id="equip-check-all" onchange="toggleCheckAll(this)" title="Selecionar todos"/></th><th>Tipo</th><th>Marca/Modelo</th><th>Patrimônio</th><th>Série</th><th>Lab</th><th>Prédio</th><th>Status</th><th>Ações</th></tr></thead><tbody id="equip-tbody"></tbody></table></div>
+      <div class="table-wrap"><table><thead><tr><th style="width:36px"><input type="checkbox" id="equip-check-all" onchange="toggleCheckAll(this)" title="Selecionar todos"/></th><th>Nomenclatura</th><th>Tipo</th><th>Marca/Modelo</th><th>Patrimônio</th><th>Série</th><th>Lab</th><th>Prédio</th><th>Status</th><th>Ações</th></tr></thead><tbody id="equip-tbody"></tbody></table></div>
       <div id="equip-pagination"></div>
     </div>`;
 
@@ -1353,7 +1353,7 @@ function filterEquip() {
   const lb=document.getElementById('equip-lab-filter')?.value||'';
   const pr=document.getElementById('equip-predio-filter')?.value||'';
   equipData = equipDataFull.filter(e=>{
-    const txt=`${e.tipo} ${e.marca||''} ${e.modelo||''} ${e.patrimonio||''} ${e.numero_serie||''}`.toLowerCase();
+    const txt=`${e.nomenclatura||''} ${e.tipo} ${e.marca||''} ${e.modelo||''} ${e.patrimonio||''} ${e.numero_serie||''}`.toLowerCase();
     const labMatch = !lb || e.laboratorio_id===lb;
     const predioMatch = !pr || e.laboratorios?.predio_id===pr || e.laboratorios?.predios?.id===pr;
     const semPat = !_filterSemPat || !e.patrimonio;
@@ -1383,7 +1383,7 @@ function renderEquipPage() {
   const pgEl=document.getElementById('equip-pagination');
   if(!tbody)return;
   const pageData = equipData.slice(equipPage*PAGE_SIZE, (equipPage+1)*PAGE_SIZE);
-  const rows=pageData.map(e=>{const lab=e.laboratorios,predio=lab?.predios;return`<tr id="equip-${e.id}" class="${!e.patrimonio?'row-sem-pat':''}"><td><input type="checkbox" class="equip-check" value="${e.id}" onchange="updateBulkBar()"/></td><td><strong>${e.tipo}</strong></td><td>${e.marca||'—'} ${e.modelo||''}</td><td class="td-mono">${e.patrimonio?e.patrimonio:'<span class="pat-missing">s/ pat.</span>'}</td><td class="td-mono">${e.numero_serie||'—'}</td><td>${lab?`${lab.numero} · ${lab.nome}`:'—'}</td><td>${predio?predioBadge(predio.nome,predio.cor):'—'}</td><td>${statusBadge(e.status)}</td><td class="actions-cell"><button class="btn btn-ghost btn-sm" onclick="showQR('${e.id}','${e.patrimonio||e.id}')">QR</button>${canEdit()?`<button class="btn btn-ghost btn-sm" onclick="modalEditEquip('${e.id}')">✏️</button><button class="btn btn-ghost btn-sm" onclick="modalNovaManut('${e.id}')">🔧</button><button class="btn btn-ghost btn-sm" onclick="deleteEquip('${e.id}')">🗑</button>`:''}<button class="btn btn-ghost btn-sm" onclick="verHistoricoEquip('${e.id}')">📋</button></td></tr>`;}).join('');
+  const rows=pageData.map(e=>{const lab=e.laboratorios,predio=lab?.predios;return`<tr id="equip-${e.id}" class="${!e.patrimonio?'row-sem-pat':''}"><td><input type="checkbox" class="equip-check" value="${e.id}" onchange="updateBulkBar()"/></td><td class="td-mono" style="font-size:11px">${e.nomenclatura||'—'}</td><td><strong>${e.tipo}</strong></td><td>${e.marca||'—'} ${e.modelo||''}</td><td class="td-mono">${e.patrimonio?e.patrimonio:'<span class="pat-missing">s/ pat.</span>'}</td><td class="td-mono">${e.numero_serie||'—'}</td><td>${lab?`${lab.numero} · ${lab.nome}`:'—'}</td><td>${predio?predioBadge(predio.nome,predio.cor):'—'}</td><td>${statusBadge(e.status)}</td><td class="actions-cell"><button class="btn btn-ghost btn-sm" onclick="showQR('${e.id}','${e.patrimonio||e.id}')">QR</button>${canEdit()?`<button class="btn btn-ghost btn-sm" onclick="modalEditEquip('${e.id}')">✏️</button><button class="btn btn-ghost btn-sm" onclick="modalNovaManut('${e.id}')">🔧</button><button class="btn btn-ghost btn-sm" onclick="deleteEquip('${e.id}')">🗑</button>`:''}<button class="btn btn-ghost btn-sm" onclick="verHistoricoEquip('${e.id}')">📋</button></td></tr>`;}).join('');
   tbody.innerHTML=rows||'<tr><td colspan="8"><div class="empty-state"><div class="es-icon">💻</div><h3>Nenhum equipamento</h3><p>Ajuste os filtros ou cadastre um novo</p>'+( canEdit()?'<br><button class="btn btn-red btn-sm" style="margin-top:12px" onclick="modalNovoEquip()">＋ Novo Equipamento</button>':'' )+'</div></td></tr>';
   if(pgEl) pgEl.innerHTML = buildPagination(equipData.length, equipPage, 'changeEquipPage', 'equip-pagination');
 }
@@ -1421,12 +1421,12 @@ async function verHistoricoEquip(id) {
 async function modalNovoEquip(){
   const {data:labs}=await db.from('laboratorios').select('*').order('numero');
   const labOpts=(labs||[]).map(l=>`<option value="${l.id}">${l.numero} · ${l.nome}</option>`).join('');
-  openModal('Novo Equipamento',`<div class="form-row"><div class="form-field"><label>Tipo *</label><select id="ne-tipo">${['computador','notebook','chromebook','monitor','projetor','amplificador','microfone','receptor_microfone','switch','roteador','nobreak','impressora','outro'].map(t=>`<option value="${t}">${t}</option>`).join('')}</select></div><div class="form-field"><label>Laboratório *</label><select id="ne-lab"><option value="">Selecione</option>${labOpts}</select></div></div><div class="form-row"><div class="form-field"><label>Marca</label><input id="ne-marca"/></div><div class="form-field"><label>Modelo</label><input id="ne-modelo"/></div></div><div class="form-row"><div class="form-field"><label>Patrimônio</label><input id="ne-pat"/></div><div class="form-field"><label>Nº Série</label><input id="ne-serie"/></div></div><div class="form-row"><div class="form-field"><label>Processador</label><input id="ne-cpu"/></div><div class="form-field"><label>RAM (GB)</label><input type="number" id="ne-ram"/></div></div><div class="form-row"><div class="form-field"><label>Armazenamento (GB)</label><input type="number" id="ne-hd"/></div><div class="form-field"><label>Sistema Operacional</label><input id="ne-so"/></div></div><div class="form-row"><div class="form-field"><label>Status</label><select id="ne-status"><option value="operacional">Operacional</option><option value="manutencao">Manutenção</option><option value="inativo">Inativo</option><option value="extraviado">Extraviado</option></select></div><div class="form-field"><label>Data Aquisição</label><input type="date" id="ne-data"/></div></div><div class="form-field form-full"><label>Observação</label><textarea id="ne-obs"></textarea></div>`,`<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-red" onclick="saveEquip()">Salvar</button>`);
+  openModal('Novo Equipamento',`<div class="form-row"><div class="form-field"><label>Tipo *</label><select id="ne-tipo">${['computador','notebook','chromebook','monitor','projetor','amplificador','microfone','receptor_microfone','switch','roteador','nobreak','impressora','outro'].map(t=>`<option value="${t}">${t}</option>`).join('')}</select></div><div class="form-field"><label>Laboratório *</label><select id="ne-lab"><option value="">Selecione</option>${labOpts}</select></div></div><div class="form-row"><div class="form-field"><label>Nomenclatura</label><input id="ne-nom" placeholder="UNA01DT..."/></div><div class="form-field"><label>Patrimônio</label><input id="ne-pat"/></div></div><div class="form-row"><div class="form-field"><label>Marca</label><input id="ne-marca"/></div><div class="form-field"><label>Modelo</label><input id="ne-modelo"/></div></div><div class="form-row"><div class="form-field"><label>Nº Série</label><input id="ne-serie"/></div><div class="form-field"><label>Sistema Operacional</label><input id="ne-so"/></div></div><div class="form-row"><div class="form-field"><label>Processador</label><input id="ne-cpu"/></div><div class="form-field"><label>RAM (GB)</label><input type="number" id="ne-ram"/></div></div><div class="form-row"><div class="form-field"><label>Armazenamento (GB)</label><input type="number" id="ne-hd"/></div><div class="form-field"><label>Status</label><select id="ne-status"><option value="operacional">Operacional</option><option value="manutencao">Manutenção</option><option value="inativo">Inativo</option><option value="extraviado">Extraviado</option></select></div></div><details style="margin:10px 0"><summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--text2)">🖥 Monitor / Periféricos</summary><div style="margin-top:10px"><div class="form-row"><div class="form-field"><label>Modelo Monitor</label><input id="ne-mon-mod"/></div><div class="form-field"><label>Nº Série Monitor</label><input id="ne-mon-serie"/></div></div><div class="form-row"><div class="form-field"><label>Patrimônio Monitor</label><input id="ne-mon-pat"/></div><div class="form-field"><label>Mouse</label><input id="ne-mouse"/></div></div><div class="form-field"><label>Teclado</label><input id="ne-teclado"/></div></div></details><div class="form-row"><div class="form-field"><label>Data Aquisição</label><input type="date" id="ne-data"/></div><div class="form-field"></div></div><div class="form-field form-full"><label>Observação</label><textarea id="ne-obs"></textarea></div>`,`<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-red" onclick="saveEquip()">Salvar</button>`);
 }
 async function saveEquip(){
   const laboratorio_id=document.getElementById('ne-lab').value;
   if(!laboratorio_id){toast('Selecione o laboratório','error');return;}
-  const {error}=await db.from('equipamentos').insert({laboratorio_id,tipo:document.getElementById('ne-tipo').value,marca:document.getElementById('ne-marca').value||null,modelo:document.getElementById('ne-modelo').value||null,patrimonio:document.getElementById('ne-pat').value||null,numero_serie:document.getElementById('ne-serie').value||null,processador:document.getElementById('ne-cpu').value||null,ram_gb:parseInt(document.getElementById('ne-ram').value)||null,armazenamento_gb:parseInt(document.getElementById('ne-hd').value)||null,sistema_operacional:document.getElementById('ne-so').value||null,status:document.getElementById('ne-status').value,observacao:document.getElementById('ne-obs').value||null,data_aquisicao:document.getElementById('ne-data').value||null});
+  const {error}=await db.from('equipamentos').insert({laboratorio_id,tipo:document.getElementById('ne-tipo').value,nomenclatura:document.getElementById('ne-nom')?.value||null,marca:document.getElementById('ne-marca').value||null,modelo:document.getElementById('ne-modelo').value||null,patrimonio:document.getElementById('ne-pat').value||null,numero_serie:document.getElementById('ne-serie').value||null,processador:document.getElementById('ne-cpu').value||null,ram_gb:parseInt(document.getElementById('ne-ram').value)||null,armazenamento_gb:parseInt(document.getElementById('ne-hd').value)||null,sistema_operacional:document.getElementById('ne-so').value||null,status:document.getElementById('ne-status').value,monitor_modelo:document.getElementById('ne-mon-mod')?.value||null,monitor_serie:document.getElementById('ne-mon-serie')?.value||null,monitor_patrimonio:document.getElementById('ne-mon-pat')?.value||null,mouse:document.getElementById('ne-mouse')?.value||null,teclado:document.getElementById('ne-teclado')?.value||null,observacao:document.getElementById('ne-obs').value||null,data_aquisicao:document.getElementById('ne-data').value||null});
   if(error){toast(error.message,'error');return;}
   toast('Equipamento cadastrado!');closeModal();renderEquipamentos();
 }
@@ -1434,10 +1434,76 @@ async function modalEditEquip(id){
   const [{data:e},{data:labs}]=await Promise.all([db.from('equipamentos').select('*').eq('id',id).single(),db.from('laboratorios').select('*').order('numero')]);
   const labOpts=(labs||[]).map(l=>`<option value="${l.id}" ${l.id===e.laboratorio_id?'selected':''}>${l.numero} · ${l.nome}</option>`).join('');
   const tiposAll=['computador','notebook','chromebook','monitor','projetor','amplificador','microfone','receptor_microfone','switch','roteador','nobreak','impressora','outro'];
-  openModal('Editar Equipamento',`<div class="form-row"><div class="form-field"><label>Tipo</label><select id="ee-tipo">${tiposAll.map(t=>`<option value="${t}" ${t===e.tipo?'selected':''}>${t}</option>`).join('')}</select></div><div class="form-field"><label>Laboratório</label><select id="ee-lab">${labOpts}</select></div></div><div class="form-row"><div class="form-field"><label>Marca</label><input id="ee-marca" value="${e.marca||''}"/></div><div class="form-field"><label>Modelo</label><input id="ee-modelo" value="${e.modelo||''}"/></div></div><div class="form-row"><div class="form-field"><label>Patrimônio</label><input id="ee-pat" value="${e.patrimonio||''}"/></div><div class="form-field"><label>Nº Série</label><input id="ee-serie" value="${e.numero_serie||''}"/></div></div><div class="form-row"><div class="form-field"><label>Processador</label><input id="ee-cpu" value="${e.processador||''}"/></div><div class="form-field"><label>RAM (GB)</label><input type="number" id="ee-ram" value="${e.ram_gb||''}"/></div></div><div class="form-row"><div class="form-field"><label>Armazenamento (GB)</label><input type="number" id="ee-hd" value="${e.armazenamento_gb||''}"/></div><div class="form-field"><label>Sistema Operacional</label><input id="ee-so" value="${e.sistema_operacional||''}"/></div></div><div class="form-row"><div class="form-field"><label>Status</label><select id="ee-status"><option value="operacional" ${e.status==='operacional'?'selected':''}>Operacional</option><option value="manutencao" ${e.status==='manutencao'?'selected':''}>Manutenção</option><option value="inativo" ${e.status==='inativo'?'selected':''}>Inativo</option><option value="extraviado" ${e.status==='extraviado'?'selected':''}>Extraviado</option></select></div><div class="form-field"><label>Data Aquisição</label><input type="date" id="ee-data" value="${e.data_aquisicao||''}"/></div></div><div class="form-field form-full"><label>Observação</label><textarea id="ee-obs">${e.observacao||''}</textarea></div>`,`<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>${isAdmin()?`<button class="btn btn-ghost" style="color:var(--red)" onclick="deleteEquip('${id}')">🗑 Excluir</button>`:''}<button class="btn btn-red" onclick="updateEquip('${id}')">Salvar</button>`);
+  openModal('Editar Equipamento',`
+    <div class="form-row">
+      <div class="form-field"><label>Tipo</label><select id="ee-tipo">${tiposAll.map(t=>`<option value="${t}" ${t===e.tipo?'selected':''}>${t}</option>`).join('')}</select></div>
+      <div class="form-field"><label>Laboratório</label><select id="ee-lab">${labOpts}</select></div>
+    </div>
+    <div class="form-row">
+      <div class="form-field"><label>Nomenclatura</label><input id="ee-nom" value="${e.nomenclatura||''}"/></div>
+      <div class="form-field"><label>Patrimônio</label><input id="ee-pat" value="${e.patrimonio||''}"/></div>
+    </div>
+    <div class="form-row">
+      <div class="form-field"><label>Marca</label><input id="ee-marca" value="${e.marca||''}"/></div>
+      <div class="form-field"><label>Modelo</label><input id="ee-modelo" value="${e.modelo||''}"/></div>
+    </div>
+    <div class="form-row">
+      <div class="form-field"><label>Nº Série</label><input id="ee-serie" value="${e.numero_serie||''}"/></div>
+      <div class="form-field"><label>Sistema Operacional</label><input id="ee-so" value="${e.sistema_operacional||''}"/></div>
+    </div>
+    <div class="form-row">
+      <div class="form-field"><label>Processador</label><input id="ee-cpu" value="${e.processador||''}"/></div>
+      <div class="form-field"><label>RAM (GB)</label><input type="number" id="ee-ram" value="${e.ram_gb||''}"/></div>
+    </div>
+    <div class="form-row">
+      <div class="form-field"><label>Armazenamento (GB)</label><input type="number" id="ee-hd" value="${e.armazenamento_gb||''}"/></div>
+      <div class="form-field"><label>Status</label><select id="ee-status">${['operacional','manutencao','inativo','extraviado'].map(s=>`<option value="${s}" ${s===e.status?'selected':''}>${s}</option>`).join('')}</select></div>
+    </div>
+    <details style="margin:10px 0" ${e.monitor_modelo||e.mouse||e.teclado?'open':''}>
+      <summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--text2)">🖥 Monitor / Periféricos</summary>
+      <div style="margin-top:10px">
+        <div class="form-row">
+          <div class="form-field"><label>Modelo Monitor</label><input id="ee-mon-mod" value="${e.monitor_modelo||''}"/></div>
+          <div class="form-field"><label>Nº Série Monitor</label><input id="ee-mon-serie" value="${e.monitor_serie||''}"/></div>
+        </div>
+        <div class="form-row">
+          <div class="form-field"><label>Patrimônio Monitor</label><input id="ee-mon-pat" value="${e.monitor_patrimonio||''}"/></div>
+          <div class="form-field"><label>Mouse</label><input id="ee-mouse" value="${e.mouse||''}"/></div>
+        </div>
+        <div class="form-field"><label>Teclado</label><input id="ee-teclado" value="${e.teclado||''}"/></div>
+      </div>
+    </details>
+    <div class="form-row">
+      <div class="form-field"><label>Data Aquisição</label><input type="date" id="ee-data" value="${e.data_aquisicao||''}"/></div>
+      <div class="form-field"></div>
+    </div>
+    <div class="form-field form-full"><label>Observação</label><textarea id="ee-obs">${e.observacao||''}</textarea></div>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+     <button class="btn btn-red" onclick="saveEditEquip(${id})">💾 Salvar</button>`);
 }
-async function updateEquip(id){
-  const {error}=await db.from('equipamentos').update({tipo:document.getElementById('ee-tipo').value,laboratorio_id:document.getElementById('ee-lab').value,marca:document.getElementById('ee-marca').value||null,modelo:document.getElementById('ee-modelo').value||null,patrimonio:document.getElementById('ee-pat').value||null,numero_serie:document.getElementById('ee-serie').value||null,processador:document.getElementById('ee-cpu').value||null,ram_gb:parseInt(document.getElementById('ee-ram').value)||null,armazenamento_gb:parseInt(document.getElementById('ee-hd').value)||null,sistema_operacional:document.getElementById('ee-so').value||null,status:document.getElementById('ee-status').value,observacao:document.getElementById('ee-obs').value||null,data_aquisicao:document.getElementById('ee-data').value||null}).eq('id',id);
+
+async function saveEditEquip(id){
+  const {error}=await db.from('equipamentos').update({
+    laboratorio_id:document.getElementById('ee-lab').value,
+    tipo:document.getElementById('ee-tipo').value,
+    nomenclatura:document.getElementById('ee-nom').value||null,
+    marca:document.getElementById('ee-marca').value||null,
+    modelo:document.getElementById('ee-modelo').value||null,
+    patrimonio:document.getElementById('ee-pat').value||null,
+    numero_serie:document.getElementById('ee-serie').value||null,
+    processador:document.getElementById('ee-cpu').value||null,
+    ram_gb:parseInt(document.getElementById('ee-ram').value)||null,
+    armazenamento_gb:parseInt(document.getElementById('ee-hd').value)||null,
+    sistema_operacional:document.getElementById('ee-so').value||null,
+    status:document.getElementById('ee-status').value,
+    monitor_modelo:document.getElementById('ee-mon-mod').value||null,
+    monitor_serie:document.getElementById('ee-mon-serie').value||null,
+    monitor_patrimonio:document.getElementById('ee-mon-pat').value||null,
+    mouse:document.getElementById('ee-mouse').value||null,
+    teclado:document.getElementById('ee-teclado').value||null,
+    observacao:document.getElementById('ee-obs').value||null,
+    data_aquisicao:document.getElementById('ee-data').value||null
+  }).eq('id',id);
   if(error){toast(error.message,'error');return;}
   toast('Equipamento atualizado!');closeModal();renderEquipamentos();
 }
@@ -3489,15 +3555,15 @@ async function aimDoImport() {
         processador: m.processador || null,
         ram_gb: ram,
         armazenamento_gb: hd,
-        sistema_operacional: m.sistema || null,
+        sistema_operacional: m.sistema ? m.sistema.replace(/windws/gi,'Windows') : null,
         status: 'operacional',
-        observacao: [
-          m.nomenclatura ? 'Nomenclatura: '+m.nomenclatura : '',
-          m.monitor_modelo ? 'Monitor: '+m.monitor_modelo : '',
-          m.monitor_patrimonio ? 'Patrimônio Monitor: '+m.monitor_patrimonio : '',
-          m.mouse ? 'Mouse: '+m.mouse : '',
-          m.teclado ? 'Teclado: '+m.teclado : '',
-        ].filter(Boolean).join(' | ') || null
+        nomenclatura: m.nomenclatura || null,
+        monitor_modelo: m.monitor_modelo || null,
+        monitor_serie: m.monitor_serie || null,
+        monitor_patrimonio: (m.monitor_patrimonio && m.monitor_patrimonio.toLowerCase()!=='sem patrimonio') ? m.monitor_patrimonio : null,
+        mouse: m.mouse || null,
+        teclado: m.teclado || null,
+        observacao: null
       };
     });
 
