@@ -2732,25 +2732,25 @@ async function aimSave(unitKey) {
         extraHeaders: { 'Prefer': 'return=minimal' }
       });
     }
-    // Salva salas
+    // Salva salas (uma linha por unit_key com data JSONB)
     await sbFetch(`unit_salas_snapshot?unit_key=eq.${unitKey}`, {
       method: 'DELETE', extraHeaders: { 'Prefer': 'return=minimal' }
     }).catch(()=>{});
     if (_aimState.salas.length) {
       await sbFetch('unit_salas_snapshot', {
         method: 'POST',
-        body: JSON.stringify(_aimState.salas.map(s => ({ ...s, unit_key: unitKey }))),
+        body: JSON.stringify({ unit_key: unitKey, data: JSON.stringify(_aimState.salas) }),
         extraHeaders: { 'Prefer': 'return=minimal' }
       });
     }
-    // Salva admin
+    // Salva admin (uma linha por unit_key com data JSONB)
     await sbFetch(`unit_admin_snapshot?unit_key=eq.${unitKey}`, {
       method: 'DELETE', extraHeaders: { 'Prefer': 'return=minimal' }
     }).catch(()=>{});
     if (_aimState.admin.length) {
       await sbFetch('unit_admin_snapshot', {
         method: 'POST',
-        body: JSON.stringify(_aimState.admin.map(a => ({ ...a, unit_key: unitKey }))),
+        body: JSON.stringify({ unit_key: unitKey, data: JSON.stringify(_aimState.admin) }),
         extraHeaders: { 'Prefer': 'return=minimal' }
       });
     }
@@ -2770,10 +2770,14 @@ async function aimLoad(unitKey) {
     }
     // Carrega salas
     const salas = await sbFetch(`unit_salas_snapshot?unit_key=eq.${unitKey}`).catch(()=>null);
-    if (salas && salas.length) _aimState.salas = salas;
+    if (salas && salas.length && salas[0].data) {
+      try { _aimState.salas = typeof salas[0].data==='string' ? JSON.parse(salas[0].data) : salas[0].data; } catch(e) { _aimState.salas = []; }
+    }
     // Carrega admin
     const admin = await sbFetch(`unit_admin_snapshot?unit_key=eq.${unitKey}`).catch(()=>null);
-    if (admin && admin.length) _aimState.admin = admin;
+    if (admin && admin.length && admin[0].data) {
+      try { _aimState.admin = typeof admin[0].data==='string' ? JSON.parse(admin[0].data) : admin[0].data; } catch(e) { _aimState.admin = []; }
+    }
   } catch(e) { console.error('aimLoad:', e); }
 }
 
