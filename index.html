@@ -3183,7 +3183,7 @@ function aimRenderSalas(fromInput) {
       <td>${h1} / ${s.horas_menos_brilho||'—'}</td>
       <td>${s.amplificador||'—'}</td>
       <td>${s.caixas_som||'—'}</td>
-      <td>${s.tomadas||'—'}</td>
+      <td style="font-size:10px;color:var(--text2)">${[s.interruptor?`💡${s.interruptor}`:'',s.vga?`VGA:${s.vga}`:'',s.rede?`🌐${s.rede}`:'',s.hdmi?`HDMI:${s.hdmi}`:'',s.tela?`🖼${s.tela}`:'',s.tomadas?`🔌${s.tomadas}`:''].filter(Boolean).join(' ')||'—'}</td>
       <td class="actions-cell">
         <button class="btn btn-ghost btn-sm" onclick="aimEditSala(${idx})">✏️</button>
         <button class="btn btn-ghost btn-sm" onclick="aimDeleteSala(${idx})">🗑</button>
@@ -3214,7 +3214,9 @@ function aimRenderSalas(fromInput) {
   <div class="table-card">
     <div class="aim-table-wrap"><table><thead><tr>
       <th>Sala/Lab</th><th>Projetor</th><th>Patrimônio</th><th>Horas (+/-)</th>
-      <th>Amplificador</th><th>Caixas Som</th><th>Tomadas</th><th>Ações</th>
+      <th>Amplificador</th><th>Caixas Som</th>
+      <th title="Interruptor / VGA / Rede / HDMI / Tela / Tomadas">Estrutura</th>
+      <th>Ações</th>
     </tr></thead><tbody id="aim-salas-tbody">${rows||'<tr><td colspan="8"><div class="empty">Nenhuma sala.</div></td></tr>'}</tbody></table></div>
     <div id="aim-salas-pg">${pg}</div>
   </div>`;
@@ -3622,10 +3624,12 @@ async function aimDoImport() {
     }
   }
 
-  // ── Importar Salas de Aula (projetores + amplificadores) ──
+  // ── Importar Salas de Aula (projetores + amplificadores + estrutura) ──
   const salasLabId = document.getElementById('aim-map-__SALAS__')?.value;
   if (salasLabId) {
     const salasItems = [];
+    const estruturaItems = [];
+
     (_aimState.salas||[]).forEach(s => {
       // Projetor
       if (s.proj_modelo || s.proj_patrimonio) {
@@ -3656,11 +3660,39 @@ async function aimDoImport() {
           observacao: s.nome ? `Sala: ${s.nome}${s.caixas_som?' | Caixas: '+s.caixas_som:''}` : null
         });
       }
+      // Estrutura física da sala
+      if (s.nome) {
+        estruturaItems.push({
+          laboratorio_id: salasLabId,
+          unit_key: _currentUnit,
+          nome: s.nome,
+          interruptor: parseInt(s.interruptor)||0,
+          vga:         parseInt(s.vga)||0,
+          rede:        parseInt(s.rede)||0,
+          hdmi:        parseInt(s.hdmi)||0,
+          tela:        parseInt(s.tela)||0,
+          tomadas:     parseInt(s.tomadas)||0,
+          caixas_som:  parseInt(s.caixas_som)||0,
+          cx_patrimonio: s.cx_patrimonio || null,
+          obs: s.obs || null
+        });
+      }
     });
+
+    // Inserir equipamentos (projetores + amplificadores)
     for (let i=0; i<salasItems.length; i+=50) {
       const { error } = await db.from('equipamentos').insert(salasItems.slice(i,i+50));
       if (error) { errors++; console.error(error); }
       else total += Math.min(50, salasItems.length-i);
+    }
+
+    // Inserir estrutura física
+    if (estruturaItems.length) {
+      for (let i=0; i<estruturaItems.length; i+=50) {
+        const { error } = await db.from('estrutura_sala').insert(estruturaItems.slice(i,i+50));
+        if (error) { errors++; console.error('estrutura_sala:', error); }
+        else total += Math.min(50, estruturaItems.length-i);
+      }
     }
   }
 
