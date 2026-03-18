@@ -3491,35 +3491,58 @@ function aimDownloadCSV(csv, filename) {
 
 // ── IMPORTAR PARA SUPABASE ──
 async function aimImportToSystem() {
-  // Verifica se há labs no Supabase para vincular
   const { data: labs } = await db.from('laboratorios').select('id,numero,nome');
   if (!labs || labs.length === 0) {
     toast('Nenhum laboratório encontrado no sistema. Cadastre os labs primeiro.','error');
     return;
   }
 
+  // ── LABs ──
   const labKeys = Object.keys(_aimState.labsData);
   const matchCandidates = labKeys.map(k => {
-    // tenta encontrar lab correspondente pelo número
     const num = k.replace('LAB','').trim().replace(/\s+/g,'');
     const match = labs.find(l => l.numero.replace(/\s+/g,'').toUpperCase().includes(num) || num.includes(l.numero.replace(/\s+/g,'').toUpperCase()));
-    return { key: k, count: (_aimState.labsData[k]||[]).length, labId: match?.id||null, labName: match ? `${match.numero} · ${match.nome}` : '(sem correspondência)' };
+    return { key: k, count: (_aimState.labsData[k]||[]).length, labId: match?.id||null, labName: match ? `${match.numero} · ${match.nome}` : '(sem correspondência)', tipo: 'lab' };
+  });
+
+  // ── ADMINISTRATIVO ──
+  const adminCount = (_aimState.admin||[]).length;
+  const adminLabMatch = labs.find(l => l.nome.toLowerCase().includes('admin') || l.numero.toLowerCase().includes('adm'));
+  matchCandidates.push({
+    key: '__ADMIN__',
+    count: adminCount,
+    labId: adminLabMatch?.id||null,
+    labName: adminLabMatch ? `${adminLabMatch.numero} · ${adminLabMatch.nome}` : '(sem correspondência)',
+    tipo: 'admin',
+    label: `📁 Administrativo (${adminCount} equipamentos)`
+  });
+
+  // ── SALAS DE AULA (projetores/áudio) ──
+  const salasCount = (_aimState.salas||[]).length;
+  const salasLabMatch = labs.find(l => l.nome.toLowerCase().includes('sala') || l.nome.toLowerCase().includes('aula'));
+  matchCandidates.push({
+    key: '__SALAS__',
+    count: salasCount,
+    labId: salasLabMatch?.id||null,
+    labName: salasLabMatch ? `${salasLabMatch.numero} · ${salasLabMatch.nome}` : '(sem correspondência)',
+    tipo: 'salas',
+    label: `🎥 Salas de Aula — projetores/áudio (${salasCount} salas)`
   });
 
   const rows = matchCandidates.map(c => `
     <tr>
-      <td><strong>${c.key}</strong></td>
+      <td><strong>${c.label||c.key}</strong></td>
       <td class="td-mono">${c.count}</td>
       <td>${c.labName}</td>
-      <td><select id="aim-map-${c.key.replace(/\s/g,'_')}" style="background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:4px 8px;color:var(--text);font-size:12px;max-width:200px">
+      <td><select id="aim-map-${c.key.replace(/[\s\/]/g,'_')}" style="background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:4px 8px;color:var(--text);font-size:12px;max-width:220px">
         <option value="">-- não importar --</option>
         ${labs.map(l=>`<option value="${l.id}" ${l.id===c.labId?'selected':''}>${l.numero} · ${l.nome}</option>`).join('')}
       </select></td>
     </tr>`).join('');
 
   openModal('☁ Importar Inventário para o Sistema',
-    `<p style="font-size:13px;color:var(--text2);margin-bottom:16px">Associe cada lab do inventário Aimorés a um laboratório do sistema. Os equipamentos serão inseridos com status <strong>operacional</strong>.</p>
-    <div class="table-wrap"><table><thead><tr><th>Lab Aimorés</th><th>Máquinas</th><th>Match Detectado</th><th>Vincular ao Lab</th></tr></thead>
+    `<p style="font-size:13px;color:var(--text2);margin-bottom:16px">Associe cada seção do inventário a um laboratório. Os equipamentos serão inseridos com status <strong>operacional</strong>.</p>
+    <div class="table-wrap"><table><thead><tr><th>Seção</th><th>Equipamentos</th><th>Match Detectado</th><th>Vincular ao Lab</th></tr></thead>
     <tbody>${rows}</tbody></table></div>`,
     `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
      <button class="btn btn-red" onclick="aimDoImport()">☁ Importar Agora</button>`);
@@ -3531,60 +3554,122 @@ async function aimDoImport() {
   const btn = document.querySelector('#modal-footer .btn-red');
   if(btn) { btn.disabled=true; btn.innerHTML='<div class="spinner"></div> Importando...'; }
 
+  // ── Helper: parse RAM/HD ──
+  function parseRam(v){ const m=String(v||'').match(/(\d+)/); return m?parseInt(m[1]):null; }
+  function parseHd(v){ const m=String(v||'').match(/(\d+)/); return m?parseInt(m[1]):null; }
+  function cleanSo(v){ return v?String(v).replace(/windws/gi,'Windows'):null; }
+  function cleanPat(v){ return (v&&String(v).toLowerCase()!=='sem patrimonio')?String(v):null; }
+
+  // ── Importar LABs ──
   for (const k of labKeys) {
-    const selId = document.getElementById(`aim-map-${k.replace(/\s/g,'_')}`)?.value;
+    const selId = document.getElementById(`aim-map-${k.replace(/[\s\/]/g,'_')}`)?.value;
     if (!selId) continue;
     const machines = _aimState.labsData[k] || [];
-    const toInsert = machines.map(m => {
-      // Parse RAM
-      let ram = null;
-      const ramMatch = String(m.memoria||'').match(/(\d+)/);
-      if (ramMatch) ram = parseInt(ramMatch[1]);
-      // Parse HD
-      let hd = null;
-      const hdMatch = String(m.armazenamento||'').match(/(\d+)/);
-      if (hdMatch) hd = parseInt(hdMatch[1]);
+    const toInsert = machines.map(m => ({
+      laboratorio_id: selId,
+      tipo: 'computador',
+      marca: m.modelo ? m.modelo.split(' ')[0] : null,
+      modelo: m.modelo || null,
+      patrimonio: m.patrimonio || null,
+      numero_serie: m.numero_serie || null,
+      processador: m.processador || null,
+      ram_gb: parseRam(m.memoria),
+      armazenamento_gb: parseHd(m.armazenamento),
+      sistema_operacional: cleanSo(m.sistema),
+      status: 'operacional',
+      nomenclatura: m.nomenclatura || null,
+      monitor_modelo: m.monitor_modelo || null,
+      monitor_serie: m.monitor_serie || null,
+      monitor_patrimonio: cleanPat(m.monitor_patrimonio),
+      mouse: m.mouse || null,
+      teclado: m.teclado || null,
+      observacao: null
+    }));
+    for (let i=0; i<toInsert.length; i+=50) {
+      const { error } = await db.from('equipamentos').insert(toInsert.slice(i,i+50));
+      if (error) { errors++; console.error(error); }
+      else total += Math.min(50, toInsert.length-i);
+    }
+  }
 
-      return {
-        laboratorio_id: selId,
-        tipo: 'computador',
-        marca: m.modelo ? m.modelo.split(' ')[0] : null,
-        modelo: m.modelo || null,
-        patrimonio: m.patrimonio || null,
-        numero_serie: m.numero_serie || null,
-        processador: m.processador || null,
-        ram_gb: ram,
-        armazenamento_gb: hd,
-        sistema_operacional: m.sistema ? m.sistema.replace(/windws/gi,'Windows') : null,
-        status: 'operacional',
-        nomenclatura: m.nomenclatura || null,
-        monitor_modelo: m.monitor_modelo || null,
-        monitor_serie: m.monitor_serie || null,
-        monitor_patrimonio: (m.monitor_patrimonio && m.monitor_patrimonio.toLowerCase()!=='sem patrimonio') ? m.monitor_patrimonio : null,
-        mouse: m.mouse || null,
-        teclado: m.teclado || null,
-        observacao: null
-      };
-    });
+  // ── Importar Administrativo ──
+  const adminLabId = document.getElementById('aim-map-__ADMIN__')?.value;
+  if (adminLabId) {
+    const toInsert = (_aimState.admin||[]).filter(a=>a.tipo||a.modelo).map(a => ({
+      laboratorio_id: adminLabId,
+      tipo: (a.tipo||'desktop').toLowerCase().includes('note')?'notebook':'computador',
+      marca: a.modelo ? a.modelo.split(' ')[0] : null,
+      modelo: a.modelo || null,
+      patrimonio: a.patrimonio || null,
+      numero_serie: a.numero_serie || null,
+      processador: a.processador || null,
+      ram_gb: parseRam(a.memoria),
+      armazenamento_gb: parseHd(a.armazenamento),
+      sistema_operacional: cleanSo(a.sistema),
+      status: 'operacional',
+      nomenclatura: null,
+      monitor_modelo: a.monitor_modelo || null,
+      monitor_serie: a.monitor_serie || null,
+      monitor_patrimonio: cleanPat(a.monitor_patrimonio),
+      mouse: a.mouse || null,
+      teclado: a.teclado || null,
+      observacao: a.setor ? `Setor: ${a.setor}` : null
+    }));
+    for (let i=0; i<toInsert.length; i+=50) {
+      const { error } = await db.from('equipamentos').insert(toInsert.slice(i,i+50));
+      if (error) { errors++; console.error(error); }
+      else total += Math.min(50, toInsert.length-i);
+    }
+  }
 
-    if (toInsert.length) {
-      // Insert in batches of 50
-      for (let i=0; i<toInsert.length; i+=50) {
-        const { error } = await db.from('equipamentos').insert(toInsert.slice(i,i+50));
-        if (error) { errors++; console.error(error); }
-        else total += Math.min(50, toInsert.length-i);
+  // ── Importar Salas de Aula (projetores + amplificadores) ──
+  const salasLabId = document.getElementById('aim-map-__SALAS__')?.value;
+  if (salasLabId) {
+    const salasItems = [];
+    (_aimState.salas||[]).forEach(s => {
+      // Projetor
+      if (s.proj_modelo || s.proj_patrimonio) {
+        salasItems.push({
+          laboratorio_id: salasLabId,
+          tipo: 'projetor',
+          marca: s.proj_fabricante || null,
+          modelo: s.proj_modelo || null,
+          patrimonio: s.proj_patrimonio || null,
+          numero_serie: s.proj_serie || null,
+          status: 'operacional',
+          observacao: [
+            s.nome ? `Sala: ${s.nome}` : '',
+            s.horas_mais_brilho ? `Horas +brilho: ${s.horas_mais_brilho}` : '',
+            s.horas_menos_brilho ? `Horas -brilho: ${s.horas_menos_brilho}` : ''
+          ].filter(Boolean).join(' | ') || null
+        });
       }
+      // Amplificador
+      if (s.amplificador || s.amp_patrimonio) {
+        salasItems.push({
+          laboratorio_id: salasLabId,
+          tipo: 'amplificador',
+          modelo: s.amplificador || null,
+          patrimonio: s.amp_patrimonio || null,
+          numero_serie: s.amp_serie || null,
+          status: 'operacional',
+          observacao: s.nome ? `Sala: ${s.nome}${s.caixas_som?' | Caixas: '+s.caixas_som:''}` : null
+        });
+      }
+    });
+    for (let i=0; i<salasItems.length; i+=50) {
+      const { error } = await db.from('equipamentos').insert(salasItems.slice(i,i+50));
+      if (error) { errors++; console.error(error); }
+      else total += Math.min(50, salasItems.length-i);
     }
   }
 
   closeModal();
-  if (errors) toast(`Importação concluída com erros. ${total} equipamentos inseridos.`, 'info');
+  if (errors) toast(`Importação concluída com ${errors} erro(s). ${total} equipamentos inseridos.`, 'info');
   else toast(`✅ ${total} equipamentos importados com sucesso!`, 'success');
+  renderInventarioUnidade(_currentUnit);
 }
 
-// ============================================================
-// ███████╗  GERENCIAR UNIDADES
-// ============================================================
 
 async function renderGerenciarUnidades() {
   const reg = await getUnitsRegistry();
